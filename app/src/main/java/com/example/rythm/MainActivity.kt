@@ -1,5 +1,5 @@
-package com.yourname.rhythm // Make sure this matches your package name!
-
+package com.example.rythm // Make sure this matches your package name!
+import java.util.Locale
 import android.Manifest
 import android.content.ContentResolver
 import android.content.ContentUris
@@ -233,8 +233,7 @@ fun SongListItem(song: Song) {
 
         val durationMinutes = (song.duration / 1000) / 60
         val durationSeconds = (song.duration / 1000) % 60
-        val durationString = String.format("%d:%02d", durationMinutes, durationSeconds)
-
+        val durationString = String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
         Text(
             text = durationString,
             style = MaterialTheme.typography.bodySmall
