@@ -45,8 +45,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import com.yourname.rhythm.ui.theme.RhythmTheme // This should also match your project
-
+import com.example.rythm.ui.theme.RythmTheme
 // This is our data model.
 data class Song(
     val id: Long,
@@ -63,7 +62,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen() // Installs a simple splash screen
 
         setContent {
-            RhythmTheme {
+            RythmTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
