@@ -56,4 +56,12 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // For Permissions (from Lesson 2)
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    // For the Splash Screen (from Lesson 2)
+    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // For the Icons (like MusicNote, from Lesson 3)
+    implementation("androidx.compose.material:material-icons-extended:1.6.8") // Or your version
 }
