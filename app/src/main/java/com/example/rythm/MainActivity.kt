@@ -1,6 +1,7 @@
 package com.example.rythm // Make sure this matches your package name!
 import java.util.Locale
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.net.Uri
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // This composable manages the permission request.
+@SuppressLint("InlinedApi")
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun PermissionGatedContent() {
