@@ -41,21 +41,36 @@ android {
 
 dependencies {
 
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // These should have been included by the template
+    implementation("androidx.core:core-ktx:1.13.1") // Or your version
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3") // Or your version
+    implementation("androidx.activity:activity-compose:1.9.0") // Or your version
+    implementation(platform("androidx.compose:compose-bom:2024.06.00")) // Or your version
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    testImplementation("junit:junit:4.13.2") // Or your version
+    androidTestImplementation("androidx.test.ext:junit:1.2.1") // Or your version
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1") // Or yourversion
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00")) // Or your version
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4") // Or your version
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // This is the Compose "Bill of Materials" - it manages versions
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+
+    // THIS LINE is for the 'ui' error
+    implementation("androidx.compose.ui:ui")
+
+    // You also need these for a basic Compose app
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.0")
+
+    // --- THESE ARE THE LIBRARIES YOU ARE LIKELY MISSING ---
+
     // For Permissions (from Lesson 2)
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
