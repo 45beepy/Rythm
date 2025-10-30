@@ -41,42 +41,34 @@ android {
 
 dependencies {
 
-    // These should have been included by the template
-    implementation("androidx.core:core-ktx:1.13.1") // Or your version
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3") // Or your version
-    implementation("androidx.activity:activity-compose:1.9.0") // Or your version
-    implementation(platform("androidx.compose:compose-bom:2024.06.00")) // Or your version
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
-    testImplementation("junit:junit:4.13.2") // Or your version
-    androidTestImplementation("androidx.test.ext:junit:1.2.1") // Or your version
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1") // Or yourversion
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00")) // Or your version
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4") // Or your version
-    debugImplementation("androidx.compose.ui:ui-tooling")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
-    // This is the Compose "Bill of Materials" - it manages versions
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
-
-    // THIS LINE is for the 'ui' error
-    implementation("androidx.compose.ui:ui")
-
-    // You also need these for a basic Compose app
-    implementation("androidx.compose.ui:ui-graphics")
-    implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+    // --- CORE & TEMPLATE ---
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
     implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.core:core-splashscreen:1.0.1") // For the Splash Screen
 
-    // --- THESE ARE THE LIBRARIES YOU ARE LIKELY MISSING ---
+    // --- COMPOSE (UI) ---
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended:1.6.8") // For Icons
 
-    // For Permissions (from Lesson 2)
+    // --- PERMISSIONS ---
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
-    // For the Splash Screen (from Lesson 2)
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    // --- MEDIA3 (THE "ENGINE" YOU ARE MISSING) ---
+    implementation("androidx.media3:media3-session:1.4.0")
+    implementation("androidx.media3:media3-exoplayer:1.4.0")
+    implementation("androidx.media3:media3-ui:1.4.0")
 
-    // For the Icons (like MusicNote, from Lesson 3)
-    implementation("androidx.compose.material:material-icons-extended:1.6.8") // Or your version
+    // --- TESTING ---
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
