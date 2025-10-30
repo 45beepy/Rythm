@@ -4,10 +4,14 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.MediaSession.Callback
+import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 class PlaybackService : MediaSessionService() {
 
-    // Use lateinit for for variables that will be initialized in onCreate
+    // Use lateinit for variables that will be initialized in onCreate
     private lateinit var mediaSession: MediaSession
     private lateinit var player: Player
 
@@ -15,12 +19,29 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Create the ExoPlayer instance. This is the actual "player."
+        // 1. Create the ExoPlayer instance.
         player = ExoPlayer.Builder(this).build()
 
-        // 2. Create the MediaSession. Now we don't need the '!!' operator
-        //    because 'player' is guaranteed to be initialized.
+        // 2. Create the MediaSession.
         mediaSession = MediaSession.Builder(this, player)
+            .setCallback(object : MediaSession.Callback {
+                // --- CORRECTED CODE ---
+                override fun onPlaybackResumption(
+                    mediaSession: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ): ListenableFuture<MediaItemsWithStartPosition> {
+                    // This is where you would restore the last played media item and position.
+                    // For now, we'll return an empty list to allow resumption without a specific item.
+                    return Futures.immediateFuture(
+                        MediaItemsWithStartPosition(
+                            emptyList(),
+                            /* startIndex = */ 0,
+                            /* startPositionMs = */ 0
+                        )
+                    )
+                }
+            })
+            // --- END CORRECTED CODE ---
             .build()
     }
 

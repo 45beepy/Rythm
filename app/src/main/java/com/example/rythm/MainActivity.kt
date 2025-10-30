@@ -57,6 +57,16 @@ import androidx.media3.session.SessionToken
 import android.content.ComponentName
 import com.google.common.util.concurrent.ListenableFuture
 import androidx.core.content.ContextCompat
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.media3.common.Player
+import androidx.compose.material3.IconButton
+import androidx.media3.session.MediaSession.Callback
+
+// These are for our listener
+import androidx.media3.common.MediaMetadata
+import androidx.compose.runtime.derivedStateOf
 
 // This is our data model.
 data class Song(
@@ -237,31 +247,39 @@ fun SongLoader() {
     } else {
         // --- UPDATED CODE ---
         // Pass the controller and the song list to our UI.
-        SongList(
-            songList = songList,
-            onSongClick = { song ->
-                // This is the "play" command!
-                mediaController?.let { controller ->
-                    // 1. Create a MediaItem that the player can understand
-                    val mediaItem = MediaItem.fromUri(song.contentUri)
-                    // 2. Set the item and command it to play
-                    controller.setMediaItem(mediaItem)
-                    controller.prepare()
-                    controller.play()
+        Column(modifier = Modifier.fillMaxSize()) {
+            // The SongList gets a 'weight' of 1f. This is a "nook and corner"
+            // that means "fill all available space" (pushing the bar to the bottom).
+            SongList(
+                modifier = Modifier.weight(1f), // <-- NEW
+                songList = songList,
+                onSongClick = { song ->
+                    mediaController?.let { controller ->
+                        val mediaItem = MediaItem.fromUri(song.contentUri)
+                        controller.setMediaItem(mediaItem)
+                        controller.prepare()
+                        controller.play()
+                    }
+                }
+            )
+
+            // Our new composable for the mini-player.
+            NowPlayingBar(mediaController = mediaController)
                 }
             }
-        )
+
         // --- END OF UPDATED CODE ---
     }
-}
+
 
 // This composable just holds the LazyColumn.
 @Composable
 fun SongList(
+    modifier: Modifier = Modifier, // <-- NEW
     songList: List<Song>,
     onSongClick: (Song) -> Unit // <-- NEW: Accept a function to call
 ) {
-    LazyColumn {
+    LazyColumn(modifier = modifier) {
         items(songList) { song ->
             SongListItem(
                 song = song,
@@ -319,5 +337,136 @@ fun SongListItem(
             text = durationString,
             style = MaterialTheme.typography.bodySmall
         )
+    }
+}
+@Composable
+fun NowPlayingBar(
+    mediaController: MediaController?
+) {
+    // 1. --- OUR UI's STATE ---
+    // We use 'remember' to hold the state. When these change,
+    // the UI will automatically "recompose" (update).
+    var currentSong: MediaMetadata? by remember { mutableStateOf(null) }
+    var isPlaying: Boolean by remember { mutableStateOf(false) }
+
+    // We use 'derivedStateOf' for the icon. This is a smart way
+    // to automatically pick the right icon based on the 'isPlaying' state.
+    val playPauseIcon by remember {
+        derivedStateOf {
+            if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
+        }
+    }
+
+    // 2. --- THE "LISTENER" ---
+    // 'DisposableEffect' is the key. It "listens" as long as the
+    // 'mediaController' is on the screen.
+    DisposableEffect(mediaController) {
+        // If there's no controller, do nothing.
+        if (mediaController == null) {
+            // Set to default state when controller is null
+            currentSong = null
+            isPlaying = false
+            return@DisposableEffect onDispose {}
+        }
+
+        // Create our "ear" (the listener).
+        val listener = object : Player.Listener {
+            // This is called when the song changes
+            override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+                super.onMediaMetadataChanged(mediaMetadata)
+                currentSong = mediaMetadata // Update our state
+            }
+
+            // This is called when the player plays or pauses
+            override fun onIsPlayingChanged(playing: Boolean) {
+                super.onIsPlayingChanged(playing)
+                isPlaying = playing // Update our state
+            }
+        }
+
+        // Attach our "ear" to the controller.
+        mediaController?.addListener(listener)
+
+        // Also, update the state to the *current* values right now
+        currentSong = mediaController?.mediaMetadata
+        isPlaying = mediaController?.isPlaying == true
+
+        // 'onDispose' is the cleanup. When the UI goes away,
+        // we remove our "ear" to prevent memory leaks.
+        onDispose {
+            mediaController?.removeListener(listener)
+        }
+    }
+
+
+    // 3. --- THE UI ---
+    // If there's no song, show nothing (an empty box).
+    if (currentSong == null) {
+        Box(modifier = Modifier.fillMaxWidth()) {}
+    } else {
+        // If there *is* a song, build the bar.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+                .clickable {
+                    // TODO: In a future lesson, click this row
+                    // to open the full player screen.
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Song Icon
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = "Song Icon",
+                modifier = Modifier.size(40.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Title and Artist
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = currentSong?.title.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = currentSong?.artist.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Play/Pause Button
+            IconButton(onClick = {
+                if (isPlaying) {
+                    mediaController?.pause()
+                } else {
+                    mediaController?.play()
+                }
+            }) {
+                Icon(
+                    imageVector = playPauseIcon,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            // Skip Button
+            IconButton(onClick = {
+                mediaController?.seekToNextMediaItem()
+            }) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = "Skip Next",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
     }
 }
