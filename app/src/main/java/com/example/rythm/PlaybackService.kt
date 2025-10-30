@@ -7,7 +7,7 @@ import androidx.media3.session.MediaSessionService
 
 class PlaybackService : MediaSessionService() {
 
-    // Use lateinit for variables that will be initialized in onCreate
+    // Use lateinit for for variables that will be initialized in onCreate
     private lateinit var mediaSession: MediaSession
     private lateinit var player: Player
 
