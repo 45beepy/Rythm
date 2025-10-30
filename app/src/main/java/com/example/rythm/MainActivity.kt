@@ -47,6 +47,17 @@ import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
 import com.example.rythm.ui.theme.RythmTheme
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.media3.common.MediaItem
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import android.content.ComponentName
+import com.google.common.util.concurrent.ListenableFuture
+import androidx.core.content.ContextCompat
+
 // This is our data model.
 data class Song(
     val id: Long,
@@ -122,7 +133,53 @@ fun SongLoader() {
     var songList by remember { mutableStateOf<List<Song>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // This runs once to load all the songs from the MediaStore.
+    // --- NEW CODE: MediaController Setup ---
+    var mediaController by remember { mutableStateOf<MediaController?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // This is the "token" that identifies our PlaybackService.
+    val sessionToken = remember {
+        SessionToken(context, ComponentName(context, PlaybackService::class.java))
+    }
+
+    // 'DisposableEffect' is a special composable for code that needs
+    // to be "cleaned up" when the UI goes away.
+    // We use it to connect/disconnect from the service.
+    DisposableEffect(lifecycleOwner, sessionToken) {
+        val controllerFuture: ListenableFuture<MediaController> =
+            MediaController.Builder(context, sessionToken).buildAsync()
+
+        controllerFuture.addListener(
+            {
+                // This block runs when the controller is ready.
+                mediaController = controllerFuture.get()
+            },
+            ContextCompat.getMainExecutor(context)
+        )
+
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                controllerFuture.addListener({ mediaController = controllerFuture.get() }, ContextCompat.getMainExecutor(context))
+            }
+            if (event == Lifecycle.Event.ON_STOP) {
+                MediaController.releaseFuture(controllerFuture)
+                mediaController = null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        // 'onDispose' is the "cleanup" block. It runs when the
+        // composable is removed from the screen.
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            MediaController.releaseFuture(controllerFuture)
+            mediaController = null
+        }
+    }
+    // --- END OF NEW CODE ---
+
+
+    // This LaunchedEffect for loading songs is THE SAME AS BEFORE.
     LaunchedEffect(Unit) {
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -146,13 +203,13 @@ fun SongLoader() {
         cursor?.use { c ->
             val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST) // <-- Make sure you fixed the bug!
             val durationColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
 
             while (c.moveToNext()) {
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
-                val artist = c.getString(artistColumn)
+                val artist = c.getString(artistColumn) // <-- Make sure this uses artistColumn
                 val duration = c.getLong(durationColumn)
 
                 val contentUri: Uri = ContentUris.withAppendedId(
@@ -168,10 +225,9 @@ fun SongLoader() {
         isLoading = false
     }
 
-    // This is the UI part of SongLoader.
-    // This is what we updated in Lesson 3.
+    // This UI part is slightly different.
+    // We now pass the 'mediaController' down to the 'SongList'.
     if (isLoading) {
-        // Show a loading spinner *centered*
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -179,33 +235,55 @@ fun SongLoader() {
             CircularProgressIndicator()
         }
     } else {
-        // When done loading, show the actual song list.
-        SongList(songList = songList)
+        // --- UPDATED CODE ---
+        // Pass the controller and the song list to our UI.
+        SongList(
+            songList = songList,
+            onSongClick = { song ->
+                // This is the "play" command!
+                mediaController?.let { controller ->
+                    // 1. Create a MediaItem that the player can understand
+                    val mediaItem = MediaItem.fromUri(song.contentUri)
+                    // 2. Set the item and command it to play
+                    controller.setMediaItem(mediaItem)
+                    controller.prepare()
+                    controller.play()
+                }
+            }
+        )
+        // --- END OF UPDATED CODE ---
     }
 }
 
 // This composable just holds the LazyColumn.
 @Composable
-fun SongList(songList: List<Song>) {
+fun SongList(
+    songList: List<Song>,
+    onSongClick: (Song) -> Unit // <-- NEW: Accept a function to call
+) {
     LazyColumn {
         items(songList) { song ->
-            SongListItem(song = song)
+            SongListItem(
+                song = song,
+                onClick = { onSongClick(song) } // <-- NEW: Pass the song to the click handler
+            )
         }
     }
 }
 
-// This composable is one row in the list.
 @Composable
-fun SongListItem(song: Song) {
+fun SongListItem(
+    song: Song,
+    onClick: () -> Unit // <-- NEW: Accept a simple click handler
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
-                Log.d("SongListItem", "Clicked on: ${song.title}")
-            }
+            .clickable(onClick = onClick) // <-- NEW: Use the passed-in click handler
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // ... the rest of your SongListItem (Icons, Text, etc.) is THE SAME ...
         Icon(
             imageVector = Icons.Default.MusicNote,
             contentDescription = "Song Icon",
@@ -236,6 +314,7 @@ fun SongListItem(song: Song) {
         val durationMinutes = (song.duration / 1000) / 60
         val durationSeconds = (song.duration / 1000) % 60
         val durationString = String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
+
         Text(
             text = durationString,
             style = MaterialTheme.typography.bodySmall
