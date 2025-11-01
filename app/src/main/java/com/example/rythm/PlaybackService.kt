@@ -55,6 +55,7 @@ class PlaybackService : MediaSessionService() {
 
     // This 'onDestroy' is called when the Service is being shut down.
     // We must release our player and session to free up resources.
+    //regular comment
     override fun onDestroy() {
         // Check if player has been initialized before releasing
         if (::player.isInitialized) {
