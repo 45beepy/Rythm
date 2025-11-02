@@ -245,8 +245,8 @@ fun SongLoader() {
             CircularProgressIndicator()
         }
     } else {
-        // --- UPDATED CODE ---
-        // Pass the controller and the song list to our UI.
+        // --- NEW LAYOUT ---
+        // A Column will hold our list and our player bar.
         Column(modifier = Modifier.fillMaxSize()) {
             // The SongList gets a 'weight' of 1f. This is a "nook and corner"
             // that means "fill all available space" (pushing the bar to the bottom).
@@ -265,8 +265,9 @@ fun SongLoader() {
 
             // Our new composable for the mini-player.
             NowPlayingBar(mediaController = mediaController)
-                }
-            }
+        }
+        // --- END OF NEW LAYOUT ---
+    }
 
         // --- END OF UPDATED CODE ---
     }
@@ -277,13 +278,13 @@ fun SongLoader() {
 fun SongList(
     modifier: Modifier = Modifier, // <-- NEW
     songList: List<Song>,
-    onSongClick: (Song) -> Unit // <-- NEW: Accept a function to call
+    onSongClick: (Song) -> Unit
 ) {
-    LazyColumn(modifier = modifier) {
+    LazyColumn(modifier = modifier) { // <-- APPLY THE MODIFIER HERE
         items(songList) { song ->
             SongListItem(
                 song = song,
-                onClick = { onSongClick(song) } // <-- NEW: Pass the song to the click handler
+                onClick = { onSongClick(song) }
             )
         }
     }

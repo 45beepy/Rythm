@@ -1,5 +1,6 @@
 package com.example.rythm
 
+import androidx.annotation.OptIn
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -8,6 +9,8 @@ import androidx.media3.session.MediaSession.Callback
 import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import androidx.media3.common.util.UnstableApi
+
 
 class PlaybackService : MediaSessionService() {
 
@@ -16,6 +19,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var player: Player
 
     // This 'onCreate' is called when the Service is first created.
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
 
@@ -24,27 +28,23 @@ class PlaybackService : MediaSessionService() {
 
         // 2. Create the MediaSession.
         mediaSession = MediaSession.Builder(this, player)
+            // --- NEW CODE ---
+            // This is the "nook and corner" we were missing.
+            // This tells the session to automatically update its
+            // metadata (like title, artist) from the MediaItem.
             .setCallback(object : MediaSession.Callback {
-                // --- CORRECTED CODE ---
                 override fun onPlaybackResumption(
                     mediaSession: MediaSession,
                     controller: MediaSession.ControllerInfo
-                ): ListenableFuture<MediaItemsWithStartPosition> {
-                    // This is where you would restore the last played media item and position.
-                    // For now, we'll return an empty list to allow resumption without a specific item.
-                    return Futures.immediateFuture(
-                        MediaItemsWithStartPosition(
-                            emptyList(),
-                            /* startIndex = */ 0,
-                            /* startPositionMs = */ 0
-                        )
-                    )
+                ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> { // <-- THIS LINE CHANGED
+                    // This is for Android Auto, etc. We can just allow it
+                    // by calling the default implementation from the parent class.
+                    return super.onPlaybackResumption(mediaSession, controller) // <-- THIS LINE CHANGED
                 }
             })
-            // --- END CORRECTED CODE ---
+            // --- END NEW CODE ---
             .build()
     }
-
     // This is called when our UI (the Activity)
     // tries to connect to this service.
     override fun onGetSession(
