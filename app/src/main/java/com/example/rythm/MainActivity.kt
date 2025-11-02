@@ -68,6 +68,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.media3.common.MediaMetadata
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 // This is our data model.
 data class Song(
@@ -132,7 +138,7 @@ fun PermissionGatedContent() {
     }
 }
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongLoader() {
     val context = LocalContext.current
@@ -249,30 +255,47 @@ fun SongLoader() {
             CircularProgressIndicator()
         }
     } else {
-        // This is the main layout
-        Column(modifier = Modifier.fillMaxSize()) {
+        // --- NEW BOTTOM SHEET LAYOUT ---
+        val scope = rememberCoroutineScope()
+        val scaffoldState = rememberBottomSheetScaffoldState()
+
+        BottomSheetScaffold(
+            scaffoldState = scaffoldState,
+            sheetPeekHeight = 80.dp, // This is the height of our collapsed mini-player
+            sheetContent = {
+                // This is the new, full "Now Playing" screen.
+                // We pass it the controller and the scaffoldState
+                // so it can expand/collapse itself.
+                PlayerScreen(
+                    mediaController = mediaController,
+                    onCollapse = {
+                        scope.launch { scaffoldState.bottomSheetState.partialExpand() }
+                    }
+                )
+            }
+        ) { innerPadding ->
+            // This is the main content of the app (our song list)
             SongList(
-                modifier = Modifier.weight(1f), // List fills all available space
+                // Use the innerPadding to avoid the list going "under" the system bars
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
                 songList = songList,
                 onSongClick = { song ->
-                    // --- (LESSON 6) Playlist Click Handler ---
                     mediaController?.let { controller ->
                         val clickedSongIndex = mediaItemsList.indexOfFirst {
                             it.mediaId == song.id.toString()
                         }
                         if (clickedSongIndex == -1) return@let
 
-                        // Set the whole playlist and seek to the clicked song
                         controller.setMediaItems(mediaItemsList, clickedSongIndex, 0L)
                         controller.prepare()
                         controller.play()
                     }
                 }
             )
-
-            // Bar at the bottom
-            NowPlayingBar(mediaController = mediaController)
         }
+        // --- END OF NEW BOTTOM SHEET LAYOUT ---
     }
 }
 
@@ -341,11 +364,15 @@ fun SongListItem(
 }
 
 // --- (LESSON 5 & 7) The "Smart" Now Playing Bar ---
+// This OptIn is needed for the BottomSheet
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NowPlayingBar(
-    mediaController: MediaController?
+fun PlayerScreen(
+    mediaController: MediaController?,
+    onCollapse: () -> Unit // Function to collapse the sheet
 ) {
-    // --- STATE ---
+    // --- 1. STATE ---
+    // All the state from our old NowPlayingBar
     var currentSong: MediaMetadata? by remember { mutableStateOf(null) }
     var isPlaying: Boolean by remember { mutableStateOf(false) }
     val playPauseIcon by remember {
@@ -353,22 +380,20 @@ fun NowPlayingBar(
             if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
         }
     }
-
-    // --- (LESSON 7) SLIDER STATE ---
     var currentPosition by remember { mutableStateOf(0L) }
     var songDuration by remember { mutableStateOf(0L) }
     var isDragging by remember { mutableStateOf(false) }
     var sliderPosition by remember { mutableStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
 
-    // --- LISTENER ---
+    // --- 2. LISTENER ---
+    // The same listener from before
     DisposableEffect(mediaController) {
         if (mediaController == null) {
             currentSong = null
             isPlaying = false
             return@DisposableEffect onDispose {}
         }
-
         val listener = object : Player.Listener {
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                 super.onMediaMetadataChanged(mediaMetadata)
@@ -387,7 +412,7 @@ fun NowPlayingBar(
         }
         mediaController.addListener(listener)
 
-        // Update to current state immediately
+        // Update to current state
         currentSong = mediaController.mediaMetadata
         isPlaying = mediaController.isPlaying
         songDuration = mediaController.duration
@@ -397,8 +422,9 @@ fun NowPlayingBar(
         }
     }
 
-    // --- (LESSON 7) POLLER ---
-    LaunchedEffect(isPlaying) {
+    // --- 3. POLLER ---
+    // The same poller from before
+    LaunchedEffect(isPlaying, isDragging) { // <-- Updated key
         if (isPlaying) {
             coroutineScope.launch {
                 while (true) {
@@ -412,79 +438,125 @@ fun NowPlayingBar(
         }
     }
 
-    // --- UI ---
-    if (currentSong == null) {
-        // No song playing, show an empty box
-        Box(modifier = Modifier.fillMaxWidth()) {}
-    } else {
-        // This is the main layout for the bar
-        Column(
+    // --- 4. THE UI ---
+    // This Column is the *entire* bottom sheet,
+    // from the mini-player to the full-screen UI.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Fill the max height a sheet can have, not the whole screen
+            .padding(bottom = 80.dp) // Add padding to avoid the slider
+        // getting cut off at the bottom
+    ) {
+
+        // --- THIS IS OUR OLD "NowPlayingBar" ---
+        // It's now the "header" of the bottom sheet
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {
-                    // TODO: Open full player screen
-                }
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .clickable { onCollapse() }, // Click to collapse!
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Song Info + Controls Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Icon(
+                imageVector = Icons.Default.MusicNote,
+                contentDescription = "Song Icon",
+                modifier = Modifier.size(40.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = currentSong?.title.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = currentSong?.artist.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            IconButton(onClick = {
+                if (isPlaying) mediaController?.pause() else mediaController?.play()
+            }) {
+                Icon(
+                    imageVector = playPauseIcon,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = "Skip Next",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+
+        // --- THIS IS THE "FULL SCREEN" UI ---
+        // It will only be visible when the sheet is expanded.
+
+        // The Slider
+        Slider(
+            value = if (isDragging) sliderPosition else currentPosition.toFloat(),
+            onValueChange = { newValue ->
+                isDragging = true
+                sliderPosition = newValue
+            },
+            onValueChangeFinished = {
+                isDragging = false
+                mediaController?.seekTo(sliderPosition.toLong())
+            },
+            valueRange = 0f..songDuration.toFloat().coerceAtLeast(1f),
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        // Main Controls (Play, Skip, etc.)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Skip Previous Button (NEW)
+            IconButton(
+                onClick = { mediaController?.seekToPreviousMediaItem() },
+                modifier = Modifier.weight(1f)
             ) {
                 Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = "Song Icon",
+                    imageVector = Icons.Default.SkipPrevious,
+                    contentDescription = "Skip Previous",
                     modifier = Modifier.size(40.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = currentSong?.title.toString(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = currentSong?.artist.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {
-                    if (isPlaying) mediaController?.pause() else mediaController?.play()
-                }) {
-                    Icon(
-                        imageVector = playPauseIcon,
-                        contentDescription = "Play/Pause",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = "Skip Next",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            } // End of Row
+            }
 
-            // (LESSON 7) Seek Bar
-            Slider(
-                value = if (isDragging) sliderPosition else currentPosition.toFloat(),
-                onValueChange = { newValue ->
-                    isDragging = true
-                    sliderPosition = newValue
-                },
-                onValueChangeFinished = {
-                    isDragging = false
-                    mediaController?.seekTo(sliderPosition.toLong())
-                },
-                valueRange = 0f..songDuration.toFloat().coerceAtLeast(1f),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        } // End of Column
+            // Play/Pause Button
+            IconButton(
+                onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() },
+                modifier = Modifier.weight(1F)
+            ) {
+                Icon(
+                    imageVector = playPauseIcon,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(56.dp) // Make it bigger
+                )
+            }
+
+            // Skip Next Button
+            IconButton(
+                onClick = { mediaController?.seekToNextMediaItem() },
+                modifier = Modifier.weight(1F)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = "Skip Next",
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+        }
     }
 }
