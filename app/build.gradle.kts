@@ -41,6 +41,9 @@ android {
 
 dependencies {
 
+    // For loading images (like album art) efficiently
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     // --- CORE & TEMPLATE ---
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
@@ -71,4 +74,6 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+
 }

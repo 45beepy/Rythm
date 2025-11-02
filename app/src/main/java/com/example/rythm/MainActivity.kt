@@ -1,4 +1,5 @@
 package com.example.rythm // Make sure this matches your package name!
+
 import java.util.Locale
 import android.Manifest
 import android.annotation.SuppressLint
@@ -7,7 +8,6 @@ import android.content.ContentUris
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -72,16 +72,20 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter // <-- ADDED IMPORT
+import coil.compose.AsyncImage
+
 
 // This is our data model.
+// Fixed: Removed the duplicate/broken albumArtUri helper
 data class Song(
     val id: Long,
     val title: String,
     val artist: String,
     val duration: Long,
-    val contentUri: Uri
+    val contentUri: Uri,
+    val albumArtUri: Uri? // This is the only one you need!
 )
 
 class MainActivity : ComponentActivity() {
@@ -196,6 +200,7 @@ fun SongLoader() {
                         MediaMetadata.Builder()
                             .setTitle(song.title)
                             .setArtist(song.artist)
+                            .setArtworkUri(song.albumArtUri)
                             .build()
                     )
                     .build()
@@ -209,7 +214,8 @@ fun SongLoader() {
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.ALBUM_ID
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -225,21 +231,34 @@ fun SongLoader() {
         )
 
         cursor?.use { c ->
+            // Get the "index" (the address) of each column
             val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val albumIdColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
 
             while (c.moveToNext()) {
+                // Get the data from the columns
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
                 val artist = c.getString(artistColumn)
                 val duration = c.getLong(durationColumn)
+                val albumId = c.getLong(albumIdColumn)
+
                 val contentUri: Uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
-                loadedSongs.add(Song(id, title, artist, duration, contentUri))
+
+                // This is the special URI for finding album art.
+                val albumArtUri: Uri? = ContentUris.withAppendedId(
+                    Uri.parse("content://media/external/audio/albumart"),
+                    albumId
+                )
+
+                // Add the new Song object with the new albumArtUri
+                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
             }
         }
         songList = loadedSongs
@@ -264,8 +283,6 @@ fun SongLoader() {
             sheetPeekHeight = 80.dp, // This is the height of our collapsed mini-player
             sheetContent = {
                 // This is the new, full "Now Playing" screen.
-                // We pass it the controller and the scaffoldState
-                // so it can expand/collapse itself.
                 PlayerScreen(
                     mediaController = mediaController,
                     onCollapse = {
@@ -330,10 +347,13 @@ fun SongListItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = Icons.Default.MusicNote,
-            contentDescription = "Song Icon",
-            modifier = Modifier.size(40.dp)
+        AsyncImage(
+            model = song.albumArtUri,
+            contentDescription = song.title,
+            modifier = Modifier.size(40.dp),
+            // Fixed: Use rememberVectorPainter to convert ImageVector to Painter
+            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+            error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(
@@ -372,7 +392,6 @@ fun PlayerScreen(
     onCollapse: () -> Unit // Function to collapse the sheet
 ) {
     // --- 1. STATE ---
-    // All the state from our old NowPlayingBar
     var currentSong: MediaMetadata? by remember { mutableStateOf(null) }
     var isPlaying: Boolean by remember { mutableStateOf(false) }
     val playPauseIcon by remember {
@@ -387,7 +406,6 @@ fun PlayerScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // --- 2. LISTENER ---
-    // The same listener from before
     DisposableEffect(mediaController) {
         if (mediaController == null) {
             currentSong = null
@@ -423,11 +441,13 @@ fun PlayerScreen(
     }
 
     // --- 3. POLLER ---
-    // The same poller from before
-    LaunchedEffect(isPlaying, isDragging) { // <-- Updated key
+    // This LaunchedEffect will re-launch if isPlaying or isDragging changes
+    LaunchedEffect(isPlaying, isDragging) {
+        // We only want to run the poller if the song is playing
         if (isPlaying) {
             coroutineScope.launch {
                 while (true) {
+                    // But we only update the position if the user is NOT dragging
                     if (!isDragging) {
                         currentPosition = mediaController?.currentPosition ?: 0L
                         sliderPosition = currentPosition.toFloat()
@@ -439,18 +459,13 @@ fun PlayerScreen(
     }
 
     // --- 4. THE UI ---
-    // This Column is the *entire* bottom sheet,
-    // from the mini-player to the full-screen UI.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            // Fill the max height a sheet can have, not the whole screen
-            .padding(bottom = 80.dp) // Add padding to avoid the slider
-        // getting cut off at the bottom
+            .padding(bottom = 80.dp)
     ) {
 
-        // --- THIS IS OUR OLD "NowPlayingBar" ---
-        // It's now the "header" of the bottom sheet
+        // --- Mini-Player / Header ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -458,10 +473,13 @@ fun PlayerScreen(
                 .clickable { onCollapse() }, // Click to collapse!
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.MusicNote,
-                contentDescription = "Song Icon",
-                modifier = Modifier.size(40.dp)
+            AsyncImage(
+                model = currentSong?.artworkUri, // <-- Get the URI from the MediaMetadata
+                contentDescription = currentSong?.title.toString(),
+                modifier = Modifier.size(40.dp),
+                // Fixed: Use rememberVectorPainter
+                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                error = rememberVectorPainter(Icons.Default.MusicNote)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -497,8 +515,7 @@ fun PlayerScreen(
             }
         }
 
-        // --- THIS IS THE "FULL SCREEN" UI ---
-        // It will only be visible when the sheet is expanded.
+        // --- Full Player UI (Slider, etc.) ---
 
         // The Slider
         Slider(
