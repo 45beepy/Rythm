@@ -1,5 +1,6 @@
 package com.example.rythm // Make sure this matches your package name!
 
+import androidx.compose.foundation.layout.height
 import java.util.Locale
 import android.Manifest
 import android.annotation.SuppressLint
@@ -459,63 +460,118 @@ fun PlayerScreen(
     }
 
     // --- 4. THE UI ---
+    // --- 4. THE UI ---
+// This outer Column wraps everything
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 80.dp)
+            .padding(bottom = 80.dp) // Keep this padding for the system nav bar
     ) {
 
         // --- Mini-Player / Header ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-                .clickable { onCollapse() }, // Click to collapse!
-            verticalAlignment = Alignment.CenterVertically
+        // This Column now just holds the mini-player row
+        Column(
+            modifier = Modifier.clickable { onCollapse() } // Click to collapse!
         ) {
-            AsyncImage(
-                model = currentSong?.artworkUri, // <-- Get the URI from the MediaMetadata
-                contentDescription = currentSong?.title.toString(),
-                modifier = Modifier.size(40.dp),
-                // Fixed: Use rememberVectorPainter
-                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-                error = rememberVectorPainter(Icons.Default.MusicNote)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = currentSong?.title.toString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // ... Your AsyncImage, Text, IconButtons ...
+                // (This Row is UNCHANGED)
+                AsyncImage(
+                    model = currentSong?.artworkUri,
+                    contentDescription = currentSong?.title.toString(),
+                    modifier = Modifier.size(40.dp),
+                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                    error = rememberVectorPainter(Icons.Default.MusicNote)
                 )
-                Text(
-                    text = currentSong?.artist.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(onClick = {
-                if (isPlaying) mediaController?.pause() else mediaController?.play()
-            }) {
-                Icon(
-                    imageVector = playPauseIcon,
-                    contentDescription = "Play/Pause",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Skip Next",
-                    modifier = Modifier.size(32.dp)
-                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentSong?.title.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = currentSong?.artist.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = {
+                    if (isPlaying) mediaController?.pause() else mediaController?.play()
+                }) {
+                    Icon(
+                        imageVector = playPauseIcon,
+                        contentDescription = "Play/Pause",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Skip Next",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
 
         // --- Full Player UI (Slider, etc.) ---
+
+        // --- THIS IS NEW ---
+        // This Spacer creates an empty 80.dp block
+        // This prevents the full-screen UI (like the Slider)
+        // from overlapping the SongList when collapsed.
+        Spacer(Modifier.height(80.dp))
+
+        // --- NEW: Full Player Art & Title ---
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp), // Add side padding
+            horizontalAlignment = Alignment.CenterHorizontally // Center everything
+        ) {
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // 1. Large Album Art
+            AsyncImage(
+                model = currentSong?.artworkUri,
+                contentDescription = "Large Album Art",
+                modifier = Modifier
+                    .fillMaxWidth() // Fill the width
+                    .padding(vertical = 16.dp), // Add some spacing
+                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                error = rememberVectorPainter(Icons.Default.MusicNote)
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // 2. Large Title
+            Text(
+                text = currentSong?.title.toString(),
+                style = MaterialTheme.typography.headlineMedium, // Bigger text
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // 3. Large Artist
+            Text(
+                text = currentSong?.artist.toString(),
+                style = MaterialTheme.typography.titleMedium, // Medium text
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+// --- END OF NEW ---
 
         // The Slider
         Slider(
