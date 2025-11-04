@@ -48,16 +48,16 @@ class PlaybackService : MediaSessionService() {
                 override fun onPlaybackResumption(
                     mediaSession: MediaSession,
                     controller: MediaSession.ControllerInfo
-                ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> { // <-- THIS LINE CHANGED
+                ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
                     // This is for Android Auto, etc. We can just allow it
                     // by calling the default implementation from the parent class.
-                    return super.onPlaybackResumption(mediaSession, controller) // <-- THIS LINE CHANGED
+                    return super.onPlaybackResumption(mediaSession, controller)
                 }
             })
             // --- END NEW CODE ---
             .build()
 
-        // --- NEW CODE: Listen for player events ---
+
         player.addListener(object : Player.Listener {
 
             // This is called when a song *ends* and moves to the next

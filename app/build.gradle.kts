@@ -82,5 +82,11 @@ dependencies {
     implementation("androidx.room:room-ktx:$room_version") // For Kotlin Coroutines support
     ksp("androidx.room:room-compiler:$room_version") // The annotation processor
 
+    // For Navigation
+    val nav_version = "2.7.7"
+    implementation("androidx.navigation:navigation-compose:$nav_version")
 
+    // For ViewModel
+    val lifecycle_version = "2.8.3"
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version")
 }
