@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+// import androidx.compose.foundation.layout.weight // <-- REMOVED
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -23,39 +24,31 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun StatsScreen() {
-    // 1. Get an instance of our StatsDatabase
     val database = StatsDatabase.getDatabase(LocalContext.current)
-
-    // 2. Create our ViewModel using the Factory we made.
-    //    This is the "nook and corner" for passing the DAO to the ViewModel.
     val viewModel: StatsViewModel = viewModel(
         factory = StatsViewModelFactory(database.songStatDao())
     )
-
-    // 3. Collect the "live stream" of stats.
-    //    'collectAsState' converts the Flow into a Compose State.
-    //    Anytime the data changes, this 'statsList' will auto-update.
     val statsList by viewModel.allStats.collectAsState(initial = emptyList())
 
-    // 4. The UI
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp) // Adds space between items
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // A simple header row
+        // Header row
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween // <-- WORKAROUND
             ) {
                 Text(
                     text = "Song",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                    fontWeight = FontWeight.Bold
+                    // modifier = Modifier.weight(1f) // <-- REMOVED
                 )
                 Text(
                     text = "Plays",
@@ -72,14 +65,14 @@ fun StatsScreen() {
     }
 }
 
-// This is the Composable for a single row in our stats list
 @Composable
 fun StatsListItem(stat: SongStat) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        // Column modifier is now empty (no weight)
+        Column {
             Text(
                 text = stat.title,
                 style = MaterialTheme.typography.bodyLarge,

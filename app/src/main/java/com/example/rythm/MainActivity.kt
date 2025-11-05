@@ -1,23 +1,8 @@
 package com.example.rythm
 
-import kotlinx.coroutines.Dispatchers
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.QueryStats
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import androidx.compose.foundation.layout.height
-import java.util.Locale
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.ContentUris
 import android.net.Uri
@@ -26,69 +11,89 @@ import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement // <-- Added for workaround
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+// import androidx.compose.foundation.layout.weight // <-- REMOVED
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
+import com.example.rythm.ui.theme.RythmTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import com.example.rythm.ui.theme.RythmTheme
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.media3.common.MediaItem
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import android.content.ComponentName
 import com.google.common.util.concurrent.ListenableFuture
-import androidx.core.content.ContextCompat
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.media3.common.Player
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.runtime.rememberCoroutineScope
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.media3.common.MediaMetadata
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import coil.compose.AsyncImage
 
 sealed class Screen(
     val route: String,
@@ -106,21 +111,20 @@ val bottomNavItems = listOf(
 )
 
 // This is our data model.
-// Fixed: Removed the duplicate/broken albumArtUri helper
 data class Song(
     val id: Long,
     val title: String,
     val artist: String,
     val duration: Long,
     val contentUri: Uri,
-    val albumArtUri: Uri? // This is the only one you need!
+    val albumArtUri: Uri?
 )
 
 class MainActivity : ComponentActivity() {
-    @OptIn(ExperimentalPermissionsApi::class) // Required for the Accompanist library
+    @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        installSplashScreen() // Installs a simple splash screen
+        installSplashScreen()
 
         setContent {
             RythmTheme {
@@ -150,7 +154,6 @@ fun PermissionGatedContent() {
 
     when {
         audioPermissionState.status.isGranted -> {
-            // Permission is granted! Call our NEW MainApp.
             MainApp()
         }
 
@@ -217,7 +220,6 @@ fun SongLoader() {
     }
 
     // --- (LESSON 6) CONVERT List<Song> to List<MediaItem> ---
-    // This includes metadata so the player can read the title/artist.
     val mediaItemsList by remember {
         derivedStateOf {
             songList.map { song ->
@@ -259,7 +261,6 @@ fun SongLoader() {
         )
 
         cursor?.use { c ->
-            // Get the "index" (the address) of each column
             val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -267,7 +268,6 @@ fun SongLoader() {
             val albumIdColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
 
             while (c.moveToNext()) {
-                // Get the data from the columns
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
                 val artist = c.getString(artistColumn)
@@ -279,13 +279,11 @@ fun SongLoader() {
                     id
                 )
 
-                // This is the special URI for finding album art.
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
                 )
 
-                // Add the new Song object with the new albumArtUri
                 loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
             }
         }
@@ -308,9 +306,8 @@ fun SongLoader() {
 
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
-            sheetPeekHeight = 80.dp, // This is the height of our collapsed mini-player
+            sheetPeekHeight = 80.dp,
             sheetContent = {
-                // This is the new, full "Now Playing" screen.
                 PlayerScreen(
                     mediaController = mediaController,
                     onCollapse = {
@@ -319,9 +316,7 @@ fun SongLoader() {
                 )
             }
         ) { innerPadding ->
-            // This is the main content of the app (our song list)
             SongList(
-                // Use the innerPadding to avoid the list going "under" the system bars
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
@@ -340,7 +335,6 @@ fun SongLoader() {
                 }
             )
         }
-        // --- END OF NEW BOTTOM SHEET LAYOUT ---
     }
 }
 
@@ -370,7 +364,7 @@ fun SongListItem(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxWidth() // <-- MODIFIED
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -379,14 +373,12 @@ fun SongListItem(
             model = song.albumArtUri,
             contentDescription = song.title,
             modifier = Modifier.size(40.dp),
-            // Fixed: Use rememberVectorPainter to convert ImageVector to Painter
             placeholder = rememberVectorPainter(Icons.Default.MusicNote),
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
+        // Column modifier is now empty (no weight)
+        Column {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -400,7 +392,8 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        // Spacer is now needed to push duration to the end
+        Spacer(modifier = Modifier.weight(1f))
         val durationMinutes = (song.duration / 1000) / 60
         val durationSeconds = (song.duration / 1000) % 60
         val durationString = String.format(Locale.getDefault(), "%d:%02d", durationMinutes, durationSeconds)
@@ -411,13 +404,12 @@ fun SongListItem(
     }
 }
 
-// --- (LESSON 5 & 7) The "Smart" Now Playing Bar ---
-// This OptIn is needed for the BottomSheet
+// --- (LESSON 5, 7, & 10) The "Smart" Player Screen ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
     mediaController: MediaController?,
-    onCollapse: () -> Unit // Function to collapse the sheet
+    onCollapse: () -> Unit
 ) {
     // --- 1. STATE ---
     var currentSong: MediaMetadata? by remember { mutableStateOf(null) }
@@ -431,9 +423,9 @@ fun PlayerScreen(
     var songDuration by remember { mutableStateOf(0L) }
     var isDragging by remember { mutableStateOf(false) }
     var sliderPosition by remember { mutableStateOf(0f) }
-
-    var lyricsText by remember { mutableStateOf("No lyrics loaded.") }
-
+    var lyricLines by remember { mutableStateOf(emptyList<LyricLine>()) }
+    var currentLyricIndex by remember { mutableStateOf(-1) }
+    var lyricStatus by remember { mutableStateOf("No lyrics loaded.") }
     val coroutineScope = rememberCoroutineScope()
 
     // --- 2. LISTENER ---
@@ -448,10 +440,12 @@ fun PlayerScreen(
                 super.onMediaMetadataChanged(mediaMetadata)
                 currentSong = mediaMetadata
             }
+
             override fun onIsPlayingChanged(playing: Boolean) {
                 super.onIsPlayingChanged(playing)
                 isPlaying = playing
             }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 super.onPlaybackStateChanged(playbackState)
                 if (playbackState == Player.STATE_READY) {
@@ -460,197 +454,202 @@ fun PlayerScreen(
             }
         }
         mediaController.addListener(listener)
-
-        // Update to current state
         currentSong = mediaController.mediaMetadata
         isPlaying = mediaController.isPlaying
         songDuration = mediaController.duration
-
         onDispose {
             mediaController.removeListener(listener)
         }
     }
 
     // --- 3. POLLER ---
-    // This LaunchedEffect will re-launch if isPlaying or isDragging changes
     LaunchedEffect(isPlaying, isDragging) {
-        // We only want to run the poller if the song is playing
         if (isPlaying) {
             coroutineScope.launch {
                 while (true) {
-                    // But we only update the position if the user is NOT dragging
                     if (!isDragging) {
-                        currentPosition = mediaController?.currentPosition ?: 0L
-                        sliderPosition = currentPosition.toFloat()
+                        val newPosition = mediaController?.currentPosition ?: 0L
+                        currentPosition = newPosition
+                        sliderPosition = newPosition.toFloat()
+                        if (lyricLines.isNotEmpty()) {
+                            val newIndex = lyricLines.indexOfLast { it.timeInMs <= newPosition }
+                            if (newIndex != currentLyricIndex) {
+                                currentLyricIndex = newIndex
+                            }
+                        }
                     }
-                    delay(1000L) // Poll every second
+                    delay(1000L)
                 }
             }
         }
     }
 
-    // --- NEW: 4. LYRICS FETCHER ---
-    // This LaunchedEffect runs *only* when 'currentSong' changes.
+    // --- 4. LYRICS FETCHER ---
     LaunchedEffect(currentSong) {
-        // If there's no song, show nothing.
         if (currentSong == null) {
-            lyricsText = ""
+            lyricStatus = ""
+            lyricLines = emptyList()
+            currentLyricIndex = -1
             return@LaunchedEffect
         }
-
         val artist = currentSong?.artist.toString()
         val title = currentSong?.title.toString()
-
-        // Don't search if the metadata is bad
         if (artist.isBlank() || title.isBlank() || artist == "null" || title == "null") {
-            lyricsText = "Lyrics not available."
+            lyricStatus = "Lyrics not available."
+            lyricLines = emptyList()
+            currentLyricIndex = -1
             return@LaunchedEffect
         }
-
-        lyricsText = "Loading lyrics..." // Show a loading message
-
-        // Launch a background coroutine (Dispatchers.IO) to do the network call
+        lyricStatus = "Loading lyrics..."
+        lyricLines = emptyList()
+        currentLyricIndex = -1
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                // This is our API call from Lesson 10, Part 1!
-                val response = RetrofitInstance.api.getLyrics(
-                    artist = artist,
-                    track = title
-                )
-
-                // Update the UI state. (We must switch back to the
-                // Main thread to update the UI, but coroutineScope
-                // handles this for us.)
-                lyricsText = response.syncedLyrics ?: "No lyrics found."
-
+                val response = RetrofitInstance.api.getLyrics(artist = artist, track = title)
+                val lrcText = response.syncedLyrics
+                if (lrcText == null) {
+                    lyricStatus = "No lyrics found."
+                } else {
+                    val lines = LyricParser.parse(lrcText)
+                    if (lines.isEmpty()) {
+                        lyricStatus = "Unsynced lyrics (not supported)."
+                    } else {
+                        lyricLines = lines
+                        lyricStatus = ""
+                    }
+                }
             } catch (e: Exception) {
-                // Handle network errors, etc.
                 e.printStackTrace()
-                lyricsText = "Error: Could not load lyrics."
+                lyricStatus = "Error: Could not load lyrics."
             }
         }
     }
 
-    // --- 4. THE UI ---
-// This outer Column wraps everything
+    // --- 5. THE UI (Workaround Version) ---
     Column(
         modifier = Modifier.fillMaxWidth()
-        // The padding on the root Column should also be removed
-        // to allow the mini-player to go full-width.
-    ){
+    ) {
 
         // --- Mini-Player / Header ---
-        // This Column now just holds the mini-player row
-        Column(
-            modifier = Modifier.clickable { onCollapse() } // Click to collapse!
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .clickable { onCollapse() },
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // ... Your AsyncImage, Text, IconButtons ...
-                // (This Row is UNCHANGED)
-                AsyncImage(
-                    model = currentSong?.artworkUri,
-                    contentDescription = currentSong?.title.toString(),
-                    modifier = Modifier.size(40.dp),
-                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-                    error = rememberVectorPainter(Icons.Default.MusicNote)
+            AsyncImage(
+                model = currentSong?.artworkUri,
+                contentDescription = currentSong?.title.toString(),
+                modifier = Modifier.size(40.dp),
+                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                error = rememberVectorPainter(Icons.Default.MusicNote)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            // Column modifier is now empty (no weight)
+            Column {
+                Text(
+                    text = currentSong?.title.toString(),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = currentSong?.title.toString(),
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = currentSong?.artist.toString(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {
-                    if (isPlaying) mediaController?.pause() else mediaController?.play()
-                }) {
-                    Icon(
-                        imageVector = playPauseIcon,
-                        contentDescription = "Play/Pause",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-                IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
-                    Icon(
-                        imageVector = Icons.Default.SkipNext,
-                        contentDescription = "Skip Next",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                Text(
+                    text = currentSong?.artist.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            // Spacer to push buttons to the end
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = {
+                if (isPlaying) mediaController?.pause() else mediaController?.play()
+            }) {
+                Icon(
+                    imageVector = playPauseIcon,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
+                Icon(
+                    imageVector = Icons.Default.SkipNext,
+                    contentDescription = "Skip Next",
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
 
-        // --- Full Player UI (Slider, etc.) ---
-
-        // --- THIS IS NEW ---
-        // This Spacer creates an empty 80.dp block
-        // This prevents the full-screen UI (like the Slider)
-        // from overlapping the SongList when collapsed.
-        Spacer(Modifier.height(80.dp))
-
-        // --- NEW: Full Player Art & Title ---
+        // --- Main Expanded Content (Art, Title, Lyrics) ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp) // Add side padding
-                .weight(1f) // <-- ADD THIS
-                .verticalScroll(rememberScrollState()), // <-- ADD THIS
-            horizontalAlignment = Alignment.CenterHorizontally // Center everything
+                // .weight(1f) // <-- REMOVED
+                .padding(horizontal = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Text(
-                text = lyricsText,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            Spacer(Modifier.height(32.dp))
 
             // 1. Large Album Art
             AsyncImage(
                 model = currentSong?.artworkUri,
                 contentDescription = "Large Album Art",
                 modifier = Modifier
-                    .fillMaxWidth() // Fill the width
-                    .padding(vertical = 16.dp), // Add some spacing
+                    .fillMaxWidth(0.8f)
+                    .padding(vertical = 16.dp),
                 placeholder = rememberVectorPainter(Icons.Default.MusicNote),
                 error = rememberVectorPainter(Icons.Default.MusicNote)
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 2. Large Title
+            // 2. Large Title & Artist
             Text(
                 text = currentSong?.title.toString(),
-                style = MaterialTheme.typography.headlineMedium, // Bigger text
+                style = MaterialTheme.typography.headlineMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-
-            // 3. Large Artist
             Text(
                 text = currentSong?.artist.toString(),
-                style = MaterialTheme.typography.titleMedium, // Medium text
+                style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            // 3. Lyrics
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (lyricLines.isEmpty()) {
+                    Text(
+                        text = lyricStatus,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                } else {
+                    lyricLines.forEachIndexed { index, line ->
+                        val isCurrentLine = (index == currentLyricIndex)
+                        val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        Text(
+                            text = line.text,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = color,
+                            fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
-// --- END OF NEW ---
+
+        // --- Bottom Controls (Slider & Buttons) ---
+        // Spacer to push controls to the bottom
+        Spacer(modifier = Modifier.weight(1f))
 
         // The Slider
         Slider(
@@ -667,17 +666,17 @@ fun PlayerScreen(
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        // Main Controls (Play, Skip, etc.)
+        // Main Controls (Workaround version)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 32.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceAround // <-- USING SpaceAround
         ) {
-            // Skip Previous Button (NEW)
             IconButton(
-                onClick = { mediaController?.seekToPreviousMediaItem() },
-                modifier = Modifier.weight(1f)
+                onClick = { mediaController?.seekToPreviousMediaItem() }
+                // modifier = Modifier.weight(1f) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -685,23 +684,19 @@ fun PlayerScreen(
                     modifier = Modifier.size(40.dp)
                 )
             }
-
-            // Play/Pause Button
             IconButton(
-                onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() },
-                modifier = Modifier.weight(1F)
+                onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() }
+                // modifier = Modifier.weight(1F) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = playPauseIcon,
                     contentDescription = "Play/Pause",
-                    modifier = Modifier.size(56.dp) // Make it bigger
+                    modifier = Modifier.size(56.dp)
                 )
             }
-
-            // Skip Next Button
             IconButton(
-                onClick = { mediaController?.seekToNextMediaItem() },
-                modifier = Modifier.weight(1F)
+                onClick = { mediaController?.seekToNextMediaItem() }
+                // modifier = Modifier.weight(1F) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
@@ -710,38 +705,27 @@ fun PlayerScreen(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
-private fun Modifier.weight(f: Float) {}
-
+// --- (LESSON 9) The App's Navigation ---
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainApp() {
-    // 1. Create a NavController. This "remembers" our navigation state.
     val navController = rememberNavController()
-
-    // 2. The Scaffold provides the structure for the Bottom Bar
     Scaffold(
         bottomBar = {
-            // --- Bottom Navigation Bar ---
             NavigationBar {
-                // Get the current screen from the NavController
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
-
-                // Create a button (NavigationBarItem) for each screen
                 bottomNavItems.forEach { screen ->
                     NavigationBarItem(
                         icon = { Icon(screen.icon, contentDescription = screen.label) },
                         label = { Text(screen.label) },
-                        // Check if this item is the currently selected one
                         selected = currentRoute == screen.route,
                         onClick = {
-                            // Navigate to the screen when clicked
                             navController.navigate(screen.route) {
-                                // This makes sure we don't build up a huge
-                                // stack of screens.
                                 popUpTo(navController.graph.startDestinationId) {
                                     saveState = true
                                 }
@@ -754,30 +738,24 @@ fun MainApp() {
             }
         }
     ) {
-        // --- This is the main content area ---
-        // 'AppNavigation' will be our NavHost that swaps screens
         AppNavigation(
             navController = navController,
-            modifier = Modifier.padding(it) // Pass the Scaffold's padding
+            modifier = Modifier.padding(it)
         )
     }
 }
+
 @Composable
 fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifier) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Library.route, // Start on the Library screen
+        startDestination = Screen.Library.route,
         modifier = modifier
     ) {
-        // Route 1: The Library Screen
         composable(Screen.Library.route) {
-            // It just calls the SongLoader we've already built!
             SongLoader()
         }
-
-        // Route 2: The Stats Screen
         composable(Screen.Stats.route) {
-            // It calls the StatsScreen we just built!
             StatsScreen()
         }
     }
