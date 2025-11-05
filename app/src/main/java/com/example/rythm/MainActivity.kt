@@ -11,7 +11,7 @@ import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement // <-- Added for workaround
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-// import androidx.compose.foundation.layout.weight // <-- REMOVED
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -95,6 +94,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// Defines the screens in our app.
 sealed class Screen(
     val route: String,
     val label: String,
@@ -175,7 +175,7 @@ fun PermissionGatedContent() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SongLoader() {
+fun SongLoader(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val contentResolver: ContentResolver = context.contentResolver
 
@@ -219,7 +219,7 @@ fun SongLoader() {
         }
     }
 
-    // --- (LESSON 6) CONVERT List<Song> to List<MediaItem> ---
+    // Convert List<Song> to List<MediaItem>
     val mediaItemsList by remember {
         derivedStateOf {
             songList.map { song ->
@@ -238,7 +238,7 @@ fun SongLoader() {
         }
     }
 
-    // --- Load Songs from MediaStore ---
+    // Load Songs from MediaStore
     LaunchedEffect(Unit) {
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -279,6 +279,7 @@ fun SongLoader() {
                     id
                 )
 
+                // This is the special URI for finding album art.
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
@@ -291,7 +292,7 @@ fun SongLoader() {
         isLoading = false
     }
 
-    // --- UI Layer (Displaying List and Player) ---
+    // UI Layer (Displaying List and Player)
     if (isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -300,11 +301,11 @@ fun SongLoader() {
             CircularProgressIndicator()
         }
     } else {
-        // --- NEW BOTTOM SHEET LAYOUT ---
         val scope = rememberCoroutineScope()
         val scaffoldState = rememberBottomSheetScaffoldState()
 
         BottomSheetScaffold(
+            modifier = modifier,
             scaffoldState = scaffoldState,
             sheetPeekHeight = 80.dp,
             sheetContent = {
@@ -319,7 +320,7 @@ fun SongLoader() {
             SongList(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding),
+                    .padding(innerPadding), // This padding is from the BottomSheet
                 songList = songList,
                 onSongClick = { song ->
                     mediaController?.let { controller ->
@@ -364,7 +365,7 @@ fun SongListItem(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth() // <-- MODIFIED
+            .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -377,7 +378,6 @@ fun SongListItem(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        // Column modifier is now empty (no weight)
         Column {
             Text(
                 text = song.title,
@@ -392,7 +392,6 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        // Spacer is now needed to push duration to the end
         Spacer(modifier = Modifier.weight(1f))
         val durationMinutes = (song.duration / 1000) / 60
         val durationSeconds = (song.duration / 1000) % 60
@@ -404,7 +403,7 @@ fun SongListItem(
     }
 }
 
-// --- (LESSON 5, 7, & 10) The "Smart" Player Screen ---
+// This is the "Smart" Player Screen
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
@@ -462,7 +461,7 @@ fun PlayerScreen(
         }
     }
 
-    // --- 3. POLLER ---
+    // --- 3. POLLER (for Slider and Lyric sync) ---
     LaunchedEffect(isPlaying, isDragging) {
         if (isPlaying) {
             coroutineScope.launch {
@@ -525,7 +524,7 @@ fun PlayerScreen(
         }
     }
 
-    // --- 5. THE UI (Workaround Version) ---
+    // --- 5. THE UI ---
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -546,7 +545,6 @@ fun PlayerScreen(
                 error = rememberVectorPainter(Icons.Default.MusicNote)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            // Column modifier is now empty (no weight)
             Column {
                 Text(
                     text = currentSong?.title.toString(),
@@ -561,7 +559,6 @@ fun PlayerScreen(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            // Spacer to push buttons to the end
             Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = {
                 if (isPlaying) mediaController?.pause() else mediaController?.play()
@@ -585,7 +582,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // .weight(1f) // <-- REMOVED
+                .weight(1f)
                 .padding(horizontal = 32.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -648,10 +645,6 @@ fun PlayerScreen(
         }
 
         // --- Bottom Controls (Slider & Buttons) ---
-        // Spacer to push controls to the bottom
-        Spacer(modifier = Modifier.weight(1f))
-
-        // The Slider
         Slider(
             value = if (isDragging) sliderPosition else currentPosition.toFloat(),
             onValueChange = { newValue ->
@@ -666,17 +659,15 @@ fun PlayerScreen(
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        // Main Controls (Workaround version)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround // <-- USING SpaceAround
+            horizontalArrangement = Arrangement.SpaceAround
         ) {
             IconButton(
                 onClick = { mediaController?.seekToPreviousMediaItem() }
-                // modifier = Modifier.weight(1f) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -686,7 +677,6 @@ fun PlayerScreen(
             }
             IconButton(
                 onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() }
-                // modifier = Modifier.weight(1F) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = playPauseIcon,
@@ -696,7 +686,6 @@ fun PlayerScreen(
             }
             IconButton(
                 onClick = { mediaController?.seekToNextMediaItem() }
-                // modifier = Modifier.weight(1F) // <-- REMOVED
             ) {
                 Icon(
                     imageVector = Icons.Default.SkipNext,
@@ -705,11 +694,10 @@ fun PlayerScreen(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(80.dp))
     }
 }
 
-// --- (LESSON 9) The App's Navigation ---
+// --- The App's Navigation ---
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainApp() {
@@ -753,7 +741,7 @@ fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifie
         modifier = modifier
     ) {
         composable(Screen.Library.route) {
-            SongLoader()
+            SongLoader(modifier = modifier)
         }
         composable(Screen.Stats.route) {
             StatsScreen()
