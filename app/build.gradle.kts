@@ -89,4 +89,11 @@ dependencies {
     // For ViewModel
     val lifecycle_version = "2.8.3"
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version")
+
+    val retrofit_version = "2.11.0"
+    // Retrofit: The networking library
+    implementation("com.squareup.retrofit2:retrofit:$retrofit_version")
+    // Gson Converter: To automatically convert JSON (from the API)
+    // into our Kotlin data classes
+    implementation("com.squareup.retrofit2:converter-gson:$retrofit_version")
 }
