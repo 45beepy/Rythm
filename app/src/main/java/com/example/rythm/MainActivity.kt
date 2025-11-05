@@ -1,5 +1,8 @@
-package com.example.rythm // Make sure this matches your package name!
+package com.example.rythm
 
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material3.NavigationBar
@@ -428,6 +431,9 @@ fun PlayerScreen(
     var songDuration by remember { mutableStateOf(0L) }
     var isDragging by remember { mutableStateOf(false) }
     var sliderPosition by remember { mutableStateOf(0f) }
+
+    var lyricsText by remember { mutableStateOf("No lyrics loaded.") }
+
     val coroutineScope = rememberCoroutineScope()
 
     // --- 2. LISTENER ---
@@ -483,14 +489,55 @@ fun PlayerScreen(
         }
     }
 
-    // --- 4. THE UI ---
+    // --- NEW: 4. LYRICS FETCHER ---
+    // This LaunchedEffect runs *only* when 'currentSong' changes.
+    LaunchedEffect(currentSong) {
+        // If there's no song, show nothing.
+        if (currentSong == null) {
+            lyricsText = ""
+            return@LaunchedEffect
+        }
+
+        val artist = currentSong?.artist.toString()
+        val title = currentSong?.title.toString()
+
+        // Don't search if the metadata is bad
+        if (artist.isBlank() || title.isBlank() || artist == "null" || title == "null") {
+            lyricsText = "Lyrics not available."
+            return@LaunchedEffect
+        }
+
+        lyricsText = "Loading lyrics..." // Show a loading message
+
+        // Launch a background coroutine (Dispatchers.IO) to do the network call
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                // This is our API call from Lesson 10, Part 1!
+                val response = RetrofitInstance.api.getLyrics(
+                    artist = artist,
+                    track = title
+                )
+
+                // Update the UI state. (We must switch back to the
+                // Main thread to update the UI, but coroutineScope
+                // handles this for us.)
+                lyricsText = response.syncedLyrics ?: "No lyrics found."
+
+            } catch (e: Exception) {
+                // Handle network errors, etc.
+                e.printStackTrace()
+                lyricsText = "Error: Could not load lyrics."
+            }
+        }
+    }
+
     // --- 4. THE UI ---
 // This outer Column wraps everything
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 80.dp) // Keep this padding for the system nav bar
-    ) {
+        modifier = Modifier.fillMaxWidth()
+        // The padding on the root Column should also be removed
+        // to allow the mini-player to go full-width.
+    ){
 
         // --- Mini-Player / Header ---
         // This Column now just holds the mini-player row
@@ -559,10 +606,18 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp), // Add side padding
+                .padding(horizontal = 32.dp) // Add side padding
+                .weight(1f) // <-- ADD THIS
+                .verticalScroll(rememberScrollState()), // <-- ADD THIS
             horizontalAlignment = Alignment.CenterHorizontally // Center everything
         ) {
             Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = lyricsText,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
             // 1. Large Album Art
             AsyncImage(
@@ -657,6 +712,9 @@ fun PlayerScreen(
         }
     }
 }
+
+private fun Modifier.weight(f: Float) {}
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainApp() {
