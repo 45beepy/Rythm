@@ -1,5 +1,16 @@
 package com.example.rythm // Make sure this matches your package name!
 
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.compose.foundation.layout.height
 import java.util.Locale
 import android.Manifest
@@ -73,10 +84,23 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.rememberVectorPainter // <-- ADDED IMPORT
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import coil.compose.AsyncImage
 
+sealed class Screen(
+    val route: String,
+    val label: String,
+    val icon: ImageVector
+) {
+    object Library : Screen("library", "Library", Icons.Default.LibraryMusic)
+    object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
+}
+
+// A helper list of all our screens
+val bottomNavItems = listOf(
+    Screen.Library,
+    Screen.Stats
+)
 
 // This is our data model.
 // Fixed: Removed the duplicate/broken albumArtUri helper
@@ -123,8 +147,8 @@ fun PermissionGatedContent() {
 
     when {
         audioPermissionState.status.isGranted -> {
-            // Permission is granted! Call SongLoader.
-            SongLoader()
+            // Permission is granted! Call our NEW MainApp.
+            MainApp()
         }
 
         audioPermissionState.status.shouldShowRationale -> {
@@ -630,6 +654,73 @@ fun PlayerScreen(
                     modifier = Modifier.size(40.dp)
                 )
             }
+        }
+    }
+}
+@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@Composable
+fun MainApp() {
+    // 1. Create a NavController. This "remembers" our navigation state.
+    val navController = rememberNavController()
+
+    // 2. The Scaffold provides the structure for the Bottom Bar
+    Scaffold(
+        bottomBar = {
+            // --- Bottom Navigation Bar ---
+            NavigationBar {
+                // Get the current screen from the NavController
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
+
+                // Create a button (NavigationBarItem) for each screen
+                bottomNavItems.forEach { screen ->
+                    NavigationBarItem(
+                        icon = { Icon(screen.icon, contentDescription = screen.label) },
+                        label = { Text(screen.label) },
+                        // Check if this item is the currently selected one
+                        selected = currentRoute == screen.route,
+                        onClick = {
+                            // Navigate to the screen when clicked
+                            navController.navigate(screen.route) {
+                                // This makes sure we don't build up a huge
+                                // stack of screens.
+                                popUpTo(navController.graph.startDestinationId) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) {
+        // --- This is the main content area ---
+        // 'AppNavigation' will be our NavHost that swaps screens
+        AppNavigation(
+            navController = navController,
+            modifier = Modifier.padding(it) // Pass the Scaffold's padding
+        )
+    }
+}
+@Composable
+fun AppNavigation(navController: NavHostController, modifier: Modifier = Modifier) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Library.route, // Start on the Library screen
+        modifier = modifier
+    ) {
+        // Route 1: The Library Screen
+        composable(Screen.Library.route) {
+            // It just calls the SongLoader we've already built!
+            SongLoader()
+        }
+
+        // Route 2: The Stats Screen
+        composable(Screen.Stats.route) {
+            // It calls the StatsScreen we just built!
+            StatsScreen()
         }
     }
 }
