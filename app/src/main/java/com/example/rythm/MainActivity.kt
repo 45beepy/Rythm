@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.BottomSheetScaffoldState // <-- NEW IMPORT
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue // <-- NEW IMPORT
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -313,6 +315,7 @@ fun SongLoader(modifier: Modifier = Modifier) {
             sheetContent = {
                 PlayerScreen(
                     mediaController = mediaController,
+                    scaffoldState = scaffoldState, // <-- PASS THE STATE
                     onCollapse = {
                         scope.launch { scaffoldState.bottomSheetState.partialExpand() }
                     }
@@ -410,6 +413,7 @@ fun SongListItem(
 @Composable
 fun PlayerScreen(
     mediaController: MediaController?,
+    scaffoldState: BottomSheetScaffoldState, // <-- ACCEPT THE STATE
     onCollapse: () -> Unit
 ) {
     // --- 1. STATE ---
@@ -430,6 +434,9 @@ fun PlayerScreen(
     var showLyrics by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val lyricListState = rememberLazyListState()
+
+    // --- NEW: Check if the sheet is expanded ---
+    val isExpanded = scaffoldState.bottomSheetState.targetValue == SheetValue.Expanded
 
     // --- 2. LISTENER ---
     DisposableEffect(mediaController) {
@@ -477,19 +484,17 @@ fun PlayerScreen(
                             val newIndex = lyricLines.indexOfLast { it.timeInMs <= newPosition }
                             if (newIndex != currentLyricIndex) {
                                 currentLyricIndex = newIndex
-
-                                // --- THIS IS THE CORRECTED AUTO-SCROLL ---
+                                // Auto-scroll to center
                                 val viewportHeight = lyricListState.layoutInfo.viewportSize.height
                                 val scrollOffset = -(viewportHeight / 2)
-                                if (currentLyricIndex > 2) { // Don't scroll for first few lines
+                                if (currentLyricIndex > 2) {
                                     lyricListState.animateScrollToItem(
                                         index = currentLyricIndex,
                                         scrollOffset = scrollOffset
                                     )
                                 } else {
-                                    lyricListState.animateScrollToItem(0) // Scroll to top for first lines
+                                    lyricListState.animateScrollToItem(0)
                                 }
-                                // --- END OF AUTO-SCROLL ---
                             }
                         }
                     }
@@ -505,7 +510,7 @@ fun PlayerScreen(
             lyricStatus = ""
             lyricLines = emptyList()
             currentLyricIndex = -1
-            showLyrics = false // <-- Reset
+            showLyrics = false
             return@LaunchedEffect
         }
         val artist = currentSong?.artist.toString()
@@ -514,13 +519,13 @@ fun PlayerScreen(
             lyricStatus = "Lyrics not available."
             lyricLines = emptyList()
             currentLyricIndex = -1
-            showLyrics = false // <-- Reset
+            showLyrics = false
             return@LaunchedEffect
         }
         lyricStatus = "Loading lyrics..."
         lyricLines = emptyList()
         currentLyricIndex = -1
-        showLyrics = false // <-- Reset
+        showLyrics = false
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -545,189 +550,217 @@ fun PlayerScreen(
     }
 
     // --- 5. THE UI ---
+    // This is the root Column for the *entire* sheet.
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        // --- Mini-Player / Header ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-                .clickable { onCollapse() },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = currentSong?.artworkUri,
-                contentDescription = currentSong?.title.toString(),
-                modifier = Modifier.size(40.dp),
-                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-                error = rememberVectorPainter(Icons.Default.MusicNote)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(
-                    text = currentSong?.title.toString(),
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = currentSong?.artist.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = {
-                if (isPlaying) mediaController?.pause() else mediaController?.play()
-            }) {
-                Icon(
-                    imageVector = playPauseIcon,
-                    contentDescription = "Play/Pause",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-            IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Skip Next",
-                    modifier = Modifier.size(32.dp)
-                )
-            }
-        }
 
-        // --- Main Expanded Content (Art, Title, Lyrics) ---
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(Modifier.height(32.dp))
-
-            // --- 1. SHOW ALBUM ART (if showLyrics is false) ---
-            if (!showLyrics) {
+        // --- NEW: Use if/else to show correct UI ---
+        if (!isExpanded) {
+            // --- Mini-Player / Header ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                // Clickable is removed, as the sheet handles the swipe
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 AsyncImage(
                     model = currentSong?.artworkUri,
-                    contentDescription = "Large Album Art",
-                    modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .padding(vertical = 16.dp),
+                    contentDescription = currentSong?.title.toString(),
+                    modifier = Modifier.size(40.dp),
                     placeholder = rememberVectorPainter(Icons.Default.MusicNote),
                     error = rememberVectorPainter(Icons.Default.MusicNote)
                 )
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = currentSong?.title.toString(),
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = currentSong?.artist.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = {
+                    if (isPlaying) mediaController?.pause() else mediaController?.play()
+                }) {
+                    Icon(
+                        imageVector = playPauseIcon,
+                        contentDescription = "Play/Pause",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                IconButton(onClick = { mediaController?.seekToNextMediaItem() }) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Skip Next",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
+        } else {
+            // --- Full Player UI ---
 
-            // 2. Large Title & Artist
-            Text(
-                text = currentSong?.title.toString(),
-                style = MaterialTheme.typography.headlineMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = currentSong?.artist.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // --- 3. THE "SHOW/HIDE" LYRICS BUTTON ---
-            TextButton(onClick = { showLyrics = !showLyrics }) {
-                Text(if (showLyrics) "Hide Lyrics" else "Show Lyrics")
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- 4. SHOW LYRICS (if showLyrics is true) ---
-            if (showLyrics) {
-                LazyColumn(
-                    state = lyricListState,
+            // This Column holds the *expanded* content
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // This Row is a "grabber" to collapse the sheet
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f), // <-- This makes the lyrics fill the remaining space
+                        .padding(vertical = 8.dp)
+                        .clickable { onCollapse() },
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    // You could put a small grey bar here
+                    Spacer(modifier = Modifier
+                        .width(40.dp)
+                        .height(4.dp)
+                        .padding(vertical = 8.dp)
+                        // This would need a color
+                        // .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                    )
+                }
+
+                // Main Expanded Content (Art, Title, Lyrics)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // *** THIS IS THE SYNTAX FIX ***
-                    // Removed the extra { } brackets
-                    if (lyricLines.isEmpty()) {
-                        item {
-                            Text(
-                                text = lyricStatus,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            )
-                        }
-                    } else {
-                        items(lyricLines.size) { index ->
-                            val line = lyricLines[index]
-                            val isCurrentLine = (index == currentLyricIndex)
-                            val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    Spacer(Modifier.height(8.dp)) // Reduced top padding
 
-                            Text(
-                                text = line.text,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = color,
-                                fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                    // 1. SHOW ALBUM ART
+                    if (!showLyrics) {
+                        AsyncImage(
+                            model = currentSong?.artworkUri,
+                            contentDescription = "Large Album Art",
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .padding(vertical = 16.dp),
+                            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                            error = rememberVectorPainter(Icons.Default.MusicNote)
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+
+                    // 2. Large Title & Artist
+                    Text(
+                        text = currentSong?.title.toString(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = currentSong?.artist.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // 3. THE "SHOW/HIDE" LYRICS BUTTON
+                    TextButton(onClick = { showLyrics = !showLyrics }) {
+                        Text(if (showLyrics) "Hide Lyrics" else "Show Lyrics")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 4. SHOW LYRICS
+                    if (showLyrics) {
+                        LazyColumn(
+                            state = lyricListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (lyricLines.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = lyricStatus,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            } else {
+                                items(lyricLines.size) { index ->
+                                    val line = lyricLines[index]
+                                    val isCurrentLine = (index == currentLyricIndex)
+                                    val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+
+                                    Text(
+                                        text = line.text,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = color,
+                                        fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        // --- Bottom Controls (Slider & Buttons) ---
-        Slider(
-            value = if (isDragging) sliderPosition else currentPosition.toFloat(),
-            onValueChange = { newValue ->
-                isDragging = true
-                sliderPosition = newValue
-            },
-            onValueChangeFinished = {
-                isDragging = false
-                mediaController?.seekTo(sliderPosition.toLong())
-            },
-            valueRange = 0f..songDuration.toFloat().coerceAtLeast(1f),
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+                // --- Bottom Controls (Slider & Buttons) ---
+                Slider(
+                    value = if (isDragging) sliderPosition else currentPosition.toFloat(),
+                    onValueChange = { newValue ->
+                        isDragging = true
+                        sliderPosition = newValue
+                    },
+                    onValueChangeFinished = {
+                        isDragging = false
+                        mediaController?.seekTo(sliderPosition.toLong())
+                    },
+                    valueRange = 0f..songDuration.toFloat().coerceAtLeast(1f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceAround
-        ) {
-            IconButton(
-                onClick = { mediaController?.seekToPreviousMediaItem() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Skip Previous",
-                    modifier = Modifier.size(40.dp)
-                )
-            }
-            IconButton(
-                onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() }
-            ) {
-                Icon(
-                    imageVector = playPauseIcon,
-                    contentDescription = "Play/Pause",
-                    modifier = Modifier.size(56.dp)
-                )
-            }
-            IconButton(
-                onClick = { mediaController?.seekToNextMediaItem() }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Skip Next",
-                    modifier = Modifier.size(40.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    IconButton(
+                        onClick = { mediaController?.seekToPreviousMediaItem() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipPrevious,
+                            contentDescription = "Skip Previous",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { if (isPlaying) mediaController?.pause() else mediaController?.play() }
+                    ) {
+                        Icon(
+                            imageVector = playPauseIcon,
+                            contentDescription = "Play/Pause",
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = { mediaController?.seekToNextMediaItem() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SkipNext,
+                            contentDescription = "Skip Next",
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
             }
         }
     }
