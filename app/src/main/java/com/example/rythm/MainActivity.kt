@@ -1,5 +1,7 @@
 package com.example.rythm
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ComponentName
@@ -427,6 +429,9 @@ fun PlayerScreen(
     var lyricStatus by remember { mutableStateOf("No lyrics loaded.") }
     val coroutineScope = rememberCoroutineScope()
 
+    // --- NEW: State for our LazyColumn ---
+    val lyricListState = rememberLazyListState()
+
     // --- 2. LISTENER ---
     DisposableEffect(mediaController) {
         if (mediaController == null) {
@@ -439,12 +444,10 @@ fun PlayerScreen(
                 super.onMediaMetadataChanged(mediaMetadata)
                 currentSong = mediaMetadata
             }
-
             override fun onIsPlayingChanged(playing: Boolean) {
                 super.onIsPlayingChanged(playing)
                 isPlaying = playing
             }
-
             override fun onPlaybackStateChanged(playbackState: Int) {
                 super.onPlaybackStateChanged(playbackState)
                 if (playbackState == Player.STATE_READY) {
@@ -461,7 +464,7 @@ fun PlayerScreen(
         }
     }
 
-    // --- 3. POLLER (for Slider and Lyric sync) ---
+    // --- 3. POLLER (with auto-scroll) ---
     LaunchedEffect(isPlaying, isDragging) {
         if (isPlaying) {
             coroutineScope.launch {
@@ -470,10 +473,18 @@ fun PlayerScreen(
                         val newPosition = mediaController?.currentPosition ?: 0L
                         currentPosition = newPosition
                         sliderPosition = newPosition.toFloat()
+
                         if (lyricLines.isNotEmpty()) {
                             val newIndex = lyricLines.indexOfLast { it.timeInMs <= newPosition }
                             if (newIndex != currentLyricIndex) {
                                 currentLyricIndex = newIndex
+
+                                // --- THIS IS THE AUTO-SCROLL ---
+                                // We scroll to 2 lines *before* the current one
+                                // to keep the active line centered.
+                                val scrollToIndex = (newIndex - 2).coerceAtLeast(0)
+                                lyricListState.animateScrollToItem(scrollToIndex)
+                                // --- END OF AUTO-SCROLL ---
                             }
                         }
                     }
@@ -524,11 +535,10 @@ fun PlayerScreen(
         }
     }
 
-    // --- 5. THE UI ---
+    // --- 5. THE NEW UI ---
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-
         // --- Mini-Player / Header ---
         Row(
             modifier = Modifier
@@ -579,12 +589,12 @@ fun PlayerScreen(
         }
 
         // --- Main Expanded Content (Art, Title, Lyrics) ---
+        // This Column now fills the space and *doesn't* scroll
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 32.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(32.dp))
@@ -599,7 +609,6 @@ fun PlayerScreen(
                 placeholder = rememberVectorPainter(Icons.Default.MusicNote),
                 error = rememberVectorPainter(Icons.Default.MusicNote)
             )
-
             Spacer(modifier = Modifier.height(32.dp))
 
             // 2. Large Title & Artist
@@ -615,21 +624,27 @@ fun PlayerScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 3. Lyrics
-            Column(
-                modifier = Modifier.fillMaxWidth()
+            // 3. Lyrics (This now fills the space and scrolls)
+            LazyColumn(
+                state = lyricListState, // <-- Attach the state
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f), // <-- This makes the lyrics fill the space
+                horizontalAlignment = Alignment.CenterHorizontally // Center the text
             ) {
                 if (lyricLines.isEmpty()) {
-                    Text(
-                        text = lyricStatus,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
+                    item {
+                        Text(
+                            text = lyricStatus,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
                 } else {
-                    lyricLines.forEachIndexed { index, line ->
+                    items(lyricLines.size) { index ->
+                        val line = lyricLines[index]
                         val isCurrentLine = (index == currentLyricIndex)
                         val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         Text(
@@ -641,7 +656,7 @@ fun PlayerScreen(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp)) // Padding before slider
         }
 
         // --- Bottom Controls (Slider & Buttons) ---
