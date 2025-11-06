@@ -32,8 +32,11 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,7 +87,6 @@ import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.material.icons.filled.Settings
 
 // Defines the screens in our app.
 sealed class Screen(
@@ -125,7 +127,7 @@ class MainActivity : ComponentActivity() {
             // Read the global theme state
             val isDarkTheme = ThemeState.isDarkTheme
 
-            RythmTheme(darkTheme = isDarkTheme) { // <-- PASS THE STATE HERE
+            RythmTheme(darkTheme = isDarkTheme) { // Pass the state here
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -171,11 +173,6 @@ fun PermissionGatedContent() {
     }
 }
 
-/**
- * This is the SIMPLIFIED SongLoader.
- * It no longer knows anything about the player.
- * It just loads songs and passes clicks to the ViewModel.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongLoader(
@@ -285,7 +282,6 @@ fun SongLoader(
 }
 
 
-// This composable just holds the LazyColumn.
 @Composable
 fun SongList(
     modifier: Modifier = Modifier,
@@ -302,7 +298,6 @@ fun SongList(
     }
 }
 
-// This composable is one row in the list.
 @Composable
 fun SongListItem(
     song: Song,
@@ -348,52 +343,45 @@ fun SongListItem(
     }
 }
 
-// This is the "Smart" Player Screen, now driven by the ViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
-    viewModel: PlayerViewModel, // Gets the VM as a parameter
-    onCollapse: () -> Unit // This is now our "back" button
+    viewModel: PlayerViewModel,
+    onCollapse: () -> Unit
 ) {
     // --- 1. STATE ---
-    // Get all state directly from the ViewModel using 'by'
     val currentSong by viewModel.currentSong
     val isPlaying by viewModel.isPlaying
     val currentPosition by viewModel.currentPosition
     val songDuration by viewModel.songDuration
+    val volume by viewModel.volume
 
     val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
-    // State for the slider
     var isDragging by remember { mutableStateOf(false) }
     var sliderPosition by remember { mutableStateOf(currentPosition.toFloat()) }
-
-    // State for lyrics
     var lyricLines by remember { mutableStateOf(emptyList<LyricLine>()) }
     var currentLyricIndex by remember { mutableStateOf(-1) }
     var lyricStatus by remember { mutableStateOf("No lyrics loaded.") }
     var showLyrics by remember { mutableStateOf(false) }
+    var showVolumeSlider by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val lyricListState = rememberLazyListState()
 
-    // --- 3. POLLER (for Slider and Lyric sync) ---
+    // --- 3. POLLER ---
     LaunchedEffect(isPlaying, isDragging, currentPosition) {
         if (isPlaying && !isDragging) {
-            // Update slider position from ViewModel
             sliderPosition = currentPosition.toFloat()
-
-            // Update lyric scroll
             if (lyricLines.isNotEmpty()) {
                 val newIndex = lyricLines.indexOfLast { it.timeInMs <= currentPosition }
                 if (newIndex != currentLyricIndex) {
                     currentLyricIndex = newIndex
-                    // Auto-scroll to center
                     val viewportHeight = lyricListState.layoutInfo.viewportSize.height
                     val scrollOffset = -(viewportHeight / 2)
-                    if (currentLyricIndex > 2) { // Don't scroll for first few lines
+                    if (currentLyricIndex > 2) {
                         lyricListState.animateScrollToItem(currentLyricIndex, scrollOffset)
                     } else {
-                        lyricListState.animateScrollToItem(0) // Scroll to top for first lines
+                        lyricListState.animateScrollToItem(0)
                     }
                 }
             }
@@ -416,7 +404,7 @@ fun PlayerScreen(
             lyricLines = emptyList()
             currentLyricIndex = -1
             showLyrics = false
-            return@LaunchedEffect
+            return@LaunchedEffect // <-- *** THIS IS THE TYPO FIX ***
         }
         lyricStatus = "Loading lyrics..."
         lyricLines = emptyList()
@@ -539,7 +527,7 @@ fun PlayerScreen(
             },
             onValueChangeFinished = {
                 isDragging = false
-                viewModel.seekTo(sliderPosition.toLong()) // Seek on drag finished
+                viewModel.seekTo(sliderPosition.toLong())
             },
             valueRange = 0f..songDuration.toFloat().coerceAtLeast(1f),
             modifier = Modifier.padding(horizontal = 16.dp)
@@ -552,6 +540,14 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceAround
         ) {
+            // Volume Button
+            IconButton(onClick = { showVolumeSlider = true }) {
+                Icon(
+                    imageVector = Icons.Default.VolumeUp,
+                    contentDescription = "Volume",
+                    modifier = Modifier.size(40.dp)
+                )
+            }
             IconButton(onClick = { viewModel.skipPrevious() }) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -574,6 +570,28 @@ fun PlayerScreen(
                 )
             }
         }
+
+        // Volume Slider Dialog
+        if (showVolumeSlider) {
+            AlertDialog(
+                onDismissRequest = { showVolumeSlider = false },
+                title = { Text("Volume") },
+                text = {
+                    Slider(
+                        value = volume,
+                        onValueChange = { newVolume ->
+                            viewModel.setVolume(newVolume)
+                        },
+                        valueRange = 0f..1f
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showVolumeSlider = false }) {
+                        Text("Done")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -583,16 +601,14 @@ fun MiniPlayerBar(
     viewModel: PlayerViewModel,
     onClick: () -> Unit
 ) {
-    // Observe state from the ViewModel
     val currentSong by viewModel.currentSong
     val isPlaying by viewModel.isPlaying
-
     val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() } // Click to open full screen
+            .clickable { onClick() }
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -635,22 +651,26 @@ fun MiniPlayerBar(
         }
     }
 }
+
 // --- The App's Navigation ---
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainApp() {
     val navController = rememberNavController()
-
     val context = LocalContext.current
     val playerViewModel: PlayerViewModel = viewModel(
         factory = PlayerViewModelFactory(context.applicationContext as Application)
     )
     val currentSong by playerViewModel.currentSong
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
 
     Scaffold(
         bottomBar = {
             Column {
-                if (currentSong != null) {
+                // Only show the mini player if a song is loaded
+                // AND we are NOT on the full player screen.
+                if (currentSong != null && currentRoute != Screen.Player.route) {
                     MiniPlayerBar(
                         viewModel = playerViewModel,
                         onClick = {
@@ -659,8 +679,6 @@ fun MainApp() {
                     )
                 }
                 NavigationBar {
-                    val navBackStackEntry by navController.currentBackStackEntryAsState()
-                    val currentRoute = navBackStackEntry?.destination?.route
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = screen.label) },
@@ -692,7 +710,7 @@ fun MainApp() {
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    viewModel: PlayerViewModel, // It now needs the ViewModel
+    viewModel: PlayerViewModel,
     modifier: Modifier = Modifier
 ) {
     NavHost(

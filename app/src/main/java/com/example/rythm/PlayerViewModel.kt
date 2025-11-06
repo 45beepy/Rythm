@@ -30,12 +30,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _isPlaying = mutableStateOf(false)
     private val _currentPosition = mutableStateOf(0L)
     private val _songDuration = mutableStateOf(0L)
+    private val _volume = mutableStateOf(1f)
 
     // Public immutable states (for your UI to read)
     val currentSong: State<MediaMetadata?> = _currentSong
     val isPlaying: State<Boolean> = _isPlaying
     val currentPosition: State<Long> = _currentPosition
     val songDuration: State<Long> = _songDuration
+    val volume: State<Float> = _volume
 
     private val sessionToken: SessionToken
 
@@ -65,6 +67,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _isPlaying.value = mediaController?.isPlaying ?: false
         _songDuration.value = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
         _currentPosition.value = mediaController?.currentPosition?.coerceAtLeast(0L) ?: 0L
+        _volume.value = mediaController?.volume ?: 1f
     }
 
     // This is the "ear" that listens for changes from the player
@@ -75,6 +78,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
+        }
+        override fun onVolumeChanged(volume: Float) {
+            _volume.value = volume
         }
     }
 
@@ -118,6 +124,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun seekTo(position: Long) {
         mediaController?.seekTo(position)
+    }
+
+    fun setVolume(volume: Float) {
+        mediaController?.volume = volume.coerceIn(0f, 1f)
     }
 
     // Clean up when the ViewModel is destroyed
