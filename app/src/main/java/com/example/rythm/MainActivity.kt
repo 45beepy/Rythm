@@ -1,7 +1,5 @@
 package com.example.rythm
 
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ComponentName
@@ -16,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,9 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
@@ -49,6 +48,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -281,7 +282,6 @@ fun SongLoader(modifier: Modifier = Modifier) {
                     id
                 )
 
-                // This is the special URI for finding album art.
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
@@ -427,9 +427,8 @@ fun PlayerScreen(
     var lyricLines by remember { mutableStateOf(emptyList<LyricLine>()) }
     var currentLyricIndex by remember { mutableStateOf(-1) }
     var lyricStatus by remember { mutableStateOf("No lyrics loaded.") }
+    var showLyrics by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
-
-    // --- NEW: State for our LazyColumn ---
     val lyricListState = rememberLazyListState()
 
     // --- 2. LISTENER ---
@@ -479,11 +478,17 @@ fun PlayerScreen(
                             if (newIndex != currentLyricIndex) {
                                 currentLyricIndex = newIndex
 
-                                // --- THIS IS THE AUTO-SCROLL ---
-                                // We scroll to 2 lines *before* the current one
-                                // to keep the active line centered.
-                                val scrollToIndex = (newIndex - 2).coerceAtLeast(0)
-                                lyricListState.animateScrollToItem(scrollToIndex)
+                                // --- THIS IS THE CORRECTED AUTO-SCROLL ---
+                                val viewportHeight = lyricListState.layoutInfo.viewportSize.height
+                                val scrollOffset = -(viewportHeight / 2)
+                                if (currentLyricIndex > 2) { // Don't scroll for first few lines
+                                    lyricListState.animateScrollToItem(
+                                        index = currentLyricIndex,
+                                        scrollOffset = scrollOffset
+                                    )
+                                } else {
+                                    lyricListState.animateScrollToItem(0) // Scroll to top for first lines
+                                }
                                 // --- END OF AUTO-SCROLL ---
                             }
                         }
@@ -500,6 +505,7 @@ fun PlayerScreen(
             lyricStatus = ""
             lyricLines = emptyList()
             currentLyricIndex = -1
+            showLyrics = false // <-- Reset
             return@LaunchedEffect
         }
         val artist = currentSong?.artist.toString()
@@ -508,11 +514,14 @@ fun PlayerScreen(
             lyricStatus = "Lyrics not available."
             lyricLines = emptyList()
             currentLyricIndex = -1
+            showLyrics = false // <-- Reset
             return@LaunchedEffect
         }
         lyricStatus = "Loading lyrics..."
         lyricLines = emptyList()
         currentLyricIndex = -1
+        showLyrics = false // <-- Reset
+
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val response = RetrofitInstance.api.getLyrics(artist = artist, track = title)
@@ -535,7 +544,7 @@ fun PlayerScreen(
         }
     }
 
-    // --- 5. THE NEW UI ---
+    // --- 5. THE UI ---
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -589,7 +598,6 @@ fun PlayerScreen(
         }
 
         // --- Main Expanded Content (Art, Title, Lyrics) ---
-        // This Column now fills the space and *doesn't* scroll
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -599,17 +607,19 @@ fun PlayerScreen(
         ) {
             Spacer(Modifier.height(32.dp))
 
-            // 1. Large Album Art
-            AsyncImage(
-                model = currentSong?.artworkUri,
-                contentDescription = "Large Album Art",
-                modifier = Modifier
-                    .fillMaxWidth(0.8f)
-                    .padding(vertical = 16.dp),
-                placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-                error = rememberVectorPainter(Icons.Default.MusicNote)
-            )
-            Spacer(modifier = Modifier.height(32.dp))
+            // --- 1. SHOW ALBUM ART (if showLyrics is false) ---
+            if (!showLyrics) {
+                AsyncImage(
+                    model = currentSong?.artworkUri,
+                    contentDescription = "Large Album Art",
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                        .padding(vertical = 16.dp),
+                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                    error = rememberVectorPainter(Icons.Default.MusicNote)
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+            }
 
             // 2. Large Title & Artist
             Text(
@@ -624,39 +634,50 @@ fun PlayerScreen(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(32.dp))
 
-            // 3. Lyrics (This now fills the space and scrolls)
-            LazyColumn(
-                state = lyricListState, // <-- Attach the state
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f), // <-- This makes the lyrics fill the space
-                horizontalAlignment = Alignment.CenterHorizontally // Center the text
-            ) {
-                if (lyricLines.isEmpty()) {
-                    item {
-                        Text(
-                            text = lyricStatus,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                } else {
-                    items(lyricLines.size) { index ->
-                        val line = lyricLines[index]
-                        val isCurrentLine = (index == currentLyricIndex)
-                        val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        Text(
-                            text = line.text,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = color,
-                            fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal
-                        )
+            // --- 3. THE "SHOW/HIDE" LYRICS BUTTON ---
+            TextButton(onClick = { showLyrics = !showLyrics }) {
+                Text(if (showLyrics) "Hide Lyrics" else "Show Lyrics")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 4. SHOW LYRICS (if showLyrics is true) ---
+            if (showLyrics) {
+                LazyColumn(
+                    state = lyricListState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f), // <-- This makes the lyrics fill the remaining space
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // *** THIS IS THE SYNTAX FIX ***
+                    // Removed the extra { } brackets
+                    if (lyricLines.isEmpty()) {
+                        item {
+                            Text(
+                                text = lyricStatus,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            )
+                        }
+                    } else {
+                        items(lyricLines.size) { index ->
+                            val line = lyricLines[index]
+                            val isCurrentLine = (index == currentLyricIndex)
+                            val color = if (isCurrentLine) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+
+                            Text(
+                                text = line.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = color,
+                                fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp)) // Padding before slider
         }
 
         // --- Bottom Controls (Slider & Buttons) ---
