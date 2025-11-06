@@ -84,6 +84,7 @@ import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.Settings
 
 // Defines the screens in our app.
 sealed class Screen(
@@ -93,13 +94,15 @@ sealed class Screen(
 ) {
     object Library : Screen("library", "Library", Icons.Default.LibraryMusic)
     object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
-    object Player : Screen("player", "Player", Icons.Default.MusicNote) // Full player screen
+    object Player : Screen("player", "Player", Icons.Default.MusicNote)
+    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
 }
 
 // A helper list of all our screens
 val bottomNavItems = listOf(
     Screen.Library,
-    Screen.Stats
+    Screen.Stats,
+    Screen.Settings
 )
 
 // This is our data model.
@@ -119,7 +122,10 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         setContent {
-            RythmTheme {
+            // Read the global theme state
+            val isDarkTheme = ThemeState.isDarkTheme
+
+            RythmTheme(darkTheme = isDarkTheme) { // <-- PASS THE STATE HERE
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -707,6 +713,9 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
             )
+        }
+        composable(Screen.Settings.route) {
+            SettingsScreen()
         }
     }
 }
