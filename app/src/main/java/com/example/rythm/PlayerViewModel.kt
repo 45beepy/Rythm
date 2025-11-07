@@ -25,19 +25,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         get() = if (mediaControllerFuture.isDone) mediaControllerFuture.get() else null
 
     // --- STATE ---
-    // Private mutable states
     private val _currentSong = mutableStateOf<MediaMetadata?>(null)
     private val _isPlaying = mutableStateOf(false)
     private val _currentPosition = mutableStateOf(0L)
     private val _songDuration = mutableStateOf(0L)
-    private val _volume = mutableStateOf(1f)
 
-    // Public immutable states (for your UI to read)
     val currentSong: State<MediaMetadata?> = _currentSong
     val isPlaying: State<Boolean> = _isPlaying
     val currentPosition: State<Long> = _currentPosition
     val songDuration: State<Long> = _songDuration
-    val volume: State<Float> = _volume
 
     private val sessionToken: SessionToken
 
@@ -46,31 +42,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             getApplication(),
             ComponentName(getApplication(), PlaybackService::class.java)
         )
-        // Connect to the service
         mediaControllerFuture = MediaController.Builder(getApplication(), sessionToken).buildAsync()
         mediaControllerFuture.addListener(
             {
-                // Controller is ready
                 mediaController?.addListener(playerListener)
-                // Get the initial state
                 updatePlayerState()
             },
             ContextCompat.getMainExecutor(getApplication())
         )
-        // Start polling for playback position
         startPolling()
     }
 
-    // Helper to get all state at once
     private fun updatePlayerState() {
         _currentSong.value = mediaController?.mediaMetadata
         _isPlaying.value = mediaController?.isPlaying ?: false
         _songDuration.value = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
         _currentPosition.value = mediaController?.currentPosition?.coerceAtLeast(0L) ?: 0L
-        _volume.value = mediaController?.volume ?: 1f
     }
 
-    // This is the "ear" that listens for changes from the player
     private val playerListener = object : Player.Listener {
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
             _currentSong.value = mediaMetadata
@@ -79,24 +68,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
         }
-        override fun onVolumeChanged(volume: Float) {
-            _volume.value = volume
-        }
+        // onVolumeChanged removed
     }
 
-    // This loop updates the seek bar
     private fun startPolling() {
         viewModelScope.launch {
             while (true) {
                 if (_isPlaying.value) {
                     _currentPosition.value = mediaController?.currentPosition?.coerceAtLeast(0L) ?: 0L
                 }
-                delay(1000L) // Poll every second
+                delay(1000L)
             }
         }
     }
 
-    // --- Public Functions (Our UI will call these) ---
+    // --- Public Functions ---
 
     fun onSongClick(songList: List<MediaItem>, songIndex: Int) {
         mediaController?.let {
@@ -126,11 +112,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         mediaController?.seekTo(position)
     }
 
-    fun setVolume(volume: Float) {
-        mediaController?.volume = volume.coerceIn(0f, 1f)
-    }
+    // setVolume function removed
 
-    // Clean up when the ViewModel is destroyed
     override fun onCleared() {
         mediaController?.removeListener(playerListener)
         MediaController.releaseFuture(mediaControllerFuture)
@@ -138,7 +121,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 }
 
-// This Factory is needed to create the ViewModel
 class PlayerViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(PlayerViewModel::class.java)) {

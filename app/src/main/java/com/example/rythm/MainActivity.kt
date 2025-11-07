@@ -35,8 +35,8 @@ import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material3.AlertDialog
+// import androidx.compose.material.icons.filled.VolumeUp // <-- REMOVED
+// import androidx.compose.material3.AlertDialog // <-- REMOVED
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -124,10 +124,8 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         setContent {
-            // Read the global theme state
             val isDarkTheme = ThemeState.isDarkTheme
-
-            RythmTheme(darkTheme = isDarkTheme) { // Pass the state here
+            RythmTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -177,7 +175,7 @@ fun PermissionGatedContent() {
 @Composable
 fun SongLoader(
     modifier: Modifier = Modifier,
-    viewModel: PlayerViewModel // Gets the VM as a parameter
+    viewModel: PlayerViewModel
 ) {
     val context = LocalContext.current
     val contentResolver: ContentResolver = context.contentResolver
@@ -264,12 +262,10 @@ fun SongLoader(
             CircularProgressIndicator()
         }
     } else {
-        // The root is just the SongList
         SongList(
-            modifier = modifier, // Pass the padding from MainApp
+            modifier = modifier,
             songList = songList,
             onSongClick = { song ->
-                // Use the ViewModel to play the song
                 val clickedSongIndex = mediaItemsList.indexOfFirst {
                     it.mediaId == song.id.toString()
                 }
@@ -354,7 +350,7 @@ fun PlayerScreen(
     val isPlaying by viewModel.isPlaying
     val currentPosition by viewModel.currentPosition
     val songDuration by viewModel.songDuration
-    val volume by viewModel.volume
+    // val volume by viewModel.volume // <-- REMOVED
 
     val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
@@ -364,11 +360,11 @@ fun PlayerScreen(
     var currentLyricIndex by remember { mutableStateOf(-1) }
     var lyricStatus by remember { mutableStateOf("No lyrics loaded.") }
     var showLyrics by remember { mutableStateOf(false) }
-    var showVolumeSlider by remember { mutableStateOf(false) }
+    // var showVolumeSlider by remember { mutableStateOf(false) } // <-- REMOVED
     val coroutineScope = rememberCoroutineScope()
     val lyricListState = rememberLazyListState()
 
-    // --- 3. POLLER ---
+    // --- 3. POLLER (for Slider and Lyric sync) ---
     LaunchedEffect(isPlaying, isDragging, currentPosition) {
         if (isPlaying && !isDragging) {
             sliderPosition = currentPosition.toFloat()
@@ -404,7 +400,7 @@ fun PlayerScreen(
             lyricLines = emptyList()
             currentLyricIndex = -1
             showLyrics = false
-            return@LaunchedEffect // <-- *** THIS IS THE TYPO FIX ***
+            return@LaunchedEffect
         }
         lyricStatus = "Loading lyrics..."
         lyricLines = emptyList()
@@ -540,14 +536,10 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceAround
         ) {
-            // Volume Button
-            IconButton(onClick = { showVolumeSlider = true }) {
-                Icon(
-                    imageVector = Icons.Default.VolumeUp,
-                    contentDescription = "Volume",
-                    modifier = Modifier.size(40.dp)
-                )
-            }
+            // --- Volume Button REMOVED ---
+            // We add a Spacer to keep the layout balanced
+            Spacer(modifier = Modifier.size(40.dp))
+
             IconButton(onClick = { viewModel.skipPrevious() }) {
                 Icon(
                     imageVector = Icons.Default.SkipPrevious,
@@ -569,29 +561,11 @@ fun PlayerScreen(
                     modifier = Modifier.size(40.dp)
                 )
             }
+            // Add another spacer for balance
+            Spacer(modifier = Modifier.size(40.dp))
         }
 
-        // Volume Slider Dialog
-        if (showVolumeSlider) {
-            AlertDialog(
-                onDismissRequest = { showVolumeSlider = false },
-                title = { Text("Volume") },
-                text = {
-                    Slider(
-                        value = volume,
-                        onValueChange = { newVolume ->
-                            viewModel.setVolume(newVolume)
-                        },
-                        valueRange = 0f..1f
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = { showVolumeSlider = false }) {
-                        Text("Done")
-                    }
-                }
-            )
-        }
+        // --- Volume Slider Dialog REMOVED ---
     }
 }
 
