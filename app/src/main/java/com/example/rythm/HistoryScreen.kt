@@ -2,10 +2,8 @@ package com.example.rythm
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -23,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
-fun HistoryScreen(modifier: Modifier = Modifier) {
+fun HistoryScreen(modifier: Modifier = Modifier) { // <-- MODIFIER ADDED
     val database = StatsDatabase.getDatabase(LocalContext.current)
 
     val viewModel: HistoryViewModel = viewModel(
@@ -42,23 +40,19 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
         }
     } else {
         LazyColumn(
-            modifier = modifier
+            modifier = modifier // <-- MODIFIER APPLIED
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            // Loop through the list with an index
             itemsIndexed(historyList!!) { index, historyItem ->
                 var showHeader = false
                 if (index == 0) {
-                    // Always show header for the very first item
                     showHeader = true
                 } else {
-                    // Check if this item is on a new day
                     val prevTimestamp = historyList!![index - 1].timestamp
                     showHeader = isNewDay(historyItem.timestamp, prevTimestamp)
                 }
 
-                // If it's a new day, show the date header
                 if (showHeader) {
                     Text(
                         text = historyItem.timestamp.formatDate(),
@@ -68,7 +62,6 @@ fun HistoryScreen(modifier: Modifier = Modifier) {
                     )
                 }
 
-                // Show the song item
                 HistoryListItem(item = historyItem)
             }
         }

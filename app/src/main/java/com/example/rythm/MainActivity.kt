@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow // <-- NEW IMPORT
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
@@ -45,14 +46,13 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.filled.QueueMusic // <-- FIXED IMPORT
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -101,6 +101,7 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
+import androidx.compose.material3.FilterChipDefaults
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,8 +121,6 @@ sealed class Screen(
     // Internal screens
     object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
     object Player : Screen("player", "Player", Icons.Default.MusicNote)
-
-    object History : Screen("history", "History", Icons.Default.History)
 }
 
 // The items to show on the bottom bar
@@ -240,7 +239,7 @@ fun AppDrawerContent(
                 icon = { Icon(Icons.Default.QueryStats, null) },
                 selected = false,
                 onClick = {
-                    navController.navigate(Screen.History.route) {
+                    navController.navigate(Screen.Stats.route) {
                         popUpTo(navController.graph.startDestinationId)
                     }
                     scope.launch { drawerState.close() }
@@ -252,6 +251,7 @@ fun AppDrawerContent(
                 icon = { Icon(Icons.Default.History, null) },
                 selected = false,
                 onClick = {
+                    navController.navigate("history")
                     scope.launch { drawerState.close() }
                 }
             )
@@ -275,16 +275,19 @@ fun AppDrawerContent(
 
 /**
  * This composable is the "Home" screen.
- * It's just a placeholder for now.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onProfileClick: () -> Unit) {
-    Column {
+fun HomeScreen(onProfileClick: () -> Unit, modifier: Modifier = Modifier) {
+    var selectedFilter by remember { mutableStateOf("Local") }
+
+    Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             IconButton(
                 onClick = onProfileClick,
@@ -296,7 +299,33 @@ fun HomeScreen(onProfileClick: () -> Unit) {
                     modifier = Modifier.fillMaxSize()
                 )
             }
+
+            val selectedChipColors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.onBackground,
+                selectedLabelColor = MaterialTheme.colorScheme.background
+            )
+
+            FilterChip(
+                selected = selectedFilter == "Local",
+                onClick = { selectedFilter = "Local" },
+                label = { Text("Local") },
+                colors = selectedChipColors
+            )
+            FilterChip(
+                selected = selectedFilter == "Drive",
+                onClick = { selectedFilter = "Drive" },
+                label = { Text("Drive") },
+                colors = selectedChipColors
+            )
+            FilterChip(
+                selected = selectedFilter == "Podcasts",
+                onClick = { selectedFilter = "Podcasts" },
+                label = { Text("Podcasts") },
+                colors = selectedChipColors
+            )
         }
+
+        // Placeholder content for Home
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -308,12 +337,11 @@ fun HomeScreen(onProfileClick: () -> Unit) {
 
 /**
  * This composable is the "Search" screen.
- * It's just a placeholder for now.
  */
 @Composable
-fun SearchScreen() {
+fun SearchScreen(modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Text("Search Screen - Coming Soon!", style = MaterialTheme.typography.titleLarge)
@@ -321,9 +349,12 @@ fun SearchScreen() {
 }
 
 
+/**
+ * This is the new "Library" screen, which contains your local songs.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SongLoader(
+fun LibraryScreen(
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel,
     onProfileClick: () -> Unit
@@ -333,7 +364,10 @@ fun SongLoader(
 
     var songList by remember { mutableStateOf<List<Song>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    var selectedFilter by remember { mutableStateOf("Local") }
+
+    // --- NEW: Library filters ---
+    var selectedFilter by remember { mutableStateOf("Albums") }
+    val filters = listOf("Albums", "Artist", "Genre", "Language")
 
     val mediaItemsList by remember {
         derivedStateOf {
@@ -354,6 +388,7 @@ fun SongLoader(
     }
 
     LaunchedEffect(Unit) {
+        // ... (Song loading logic is unchanged) ...
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -361,11 +396,9 @@ fun SongLoader(
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID
         )
-
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
         val loadedSongs = mutableListOf<Song>()
-
         val cursor = contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -373,31 +406,26 @@ fun SongLoader(
             null,
             sortOrder
         )
-
         cursor?.use { c ->
             val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-
             while (c.moveToNext()) {
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
                 val artist = c.getString(artistColumn)
                 val duration = c.getLong(durationColumn)
                 val albumId = c.getLong(albumIdColumn)
-
                 val contentUri: Uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
-
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
                 )
-
                 loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
             }
         }
@@ -414,51 +442,26 @@ fun SongLoader(
         }
     } else {
         Column(modifier = modifier) {
-            Row(
+            // --- NEW: Horizontal scrolling filters ---
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IconButton(
-                    onClick = onProfileClick,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.AccountCircle,
-                        contentDescription = "Profile",
-                        modifier = Modifier.fillMaxSize()
+                items(filters) { filter ->
+                    FilterChip(
+                        selected = selectedFilter == filter,
+                        onClick = { selectedFilter = filter },
+                        label = { Text(filter) }
                     )
                 }
-
-                val selectedChipColors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.onBackground,
-                    selectedLabelColor = MaterialTheme.colorScheme.background
-                )
-
-                FilterChip(
-                    selected = selectedFilter == "Local",
-                    onClick = { selectedFilter = "Local" },
-                    label = { Text("Local") },
-                    colors = selectedChipColors
-                )
-                FilterChip(
-                    selected = selectedFilter == "Drive",
-                    onClick = { selectedFilter = "Drive" },
-                    label = { Text("Drive") },
-                    colors = selectedChipColors
-                )
-                FilterChip(
-                    selected = selectedFilter == "Podcasts",
-                    onClick = { selectedFilter = "Podcasts" },
-                    label = { Text("Podcasts") },
-                    colors = selectedChipColors
-                )
             }
 
+            // --- Show content based on filter ---
+            // For now, only the "Albums" filter shows the song list
             when (selectedFilter) {
-                "Local" -> {
+                "Albums" -> {
                     SongList(
                         modifier = Modifier.fillMaxSize(),
                         songList = songList,
@@ -472,14 +475,19 @@ fun SongLoader(
                         }
                     )
                 }
-                "Drive" -> {
+                "Artist" -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Drive feature coming soon!")
+                        Text("Artist view coming soon!")
                     }
                 }
-                "Podcasts" -> {
+                "Genre" -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Podcasts feature coming soon!")
+                        Text("Genre view coming soon!")
+                    }
+                }
+                "Language" -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Language view coming soon!")
                     }
                 }
             }
@@ -515,7 +523,7 @@ fun SongListItem(
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween // <-- WORKAROUND
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         AsyncImage(
             model = song.albumArtUri,
@@ -525,9 +533,8 @@ fun SongListItem(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        // Column now has no weight
         Column(
-            modifier = Modifier.fillMaxWidth(0.7f) // Take up 70% of the space
+            modifier = Modifier.fillMaxWidth(0.7f)
         ) {
             Text(
                 text = song.title,
@@ -648,13 +655,13 @@ fun PlayerScreen(
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Default.KeyboardArrowDown, "Collapse")
             }
             Text(
                 "PLAYING FROM YOUR LIBRARY",
-                modifier = Modifier.weight(1f), // <-- This will get fixed by import
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -667,7 +674,7 @@ fun PlayerScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f) // <-- This will get fixed by import
+                .weight(1f)
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -688,7 +695,7 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) { // <-- This will get fixed by import
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = currentSong?.title.toString(),
                         style = MaterialTheme.typography.headlineMedium,
@@ -721,7 +728,7 @@ fun PlayerScreen(
                     state = lyricListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f), // <-- This will get fixed by import
+                        .weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (lyricLines.isEmpty()) {
@@ -828,7 +835,7 @@ fun PlayerScreen(
             IconButton(onClick = { /* TODO: Devices */ }) {
                 Icon(Icons.Outlined.Devices, "Devices")
             }
-            Spacer(modifier = Modifier.weight(1f)) // <-- This will get fixed by import
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = { /* TODO: Share */ }) {
                 Icon(Icons.Default.Share, "Share")
             }
@@ -864,7 +871,7 @@ fun MiniPlayerBar(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) { // <-- This will get fixed by import
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = currentSong?.title.toString(),
                 style = MaterialTheme.typography.bodyLarge,
@@ -965,20 +972,23 @@ fun AppNavigation(
         modifier = modifier
     ) {
         composable(Screen.Home.route) {
-            HomeScreen(onProfileClick = onProfileClick)
+            HomeScreen(
+                modifier = modifier,
+                onProfileClick = onProfileClick
+            )
         }
         composable(Screen.Search.route) {
-            SearchScreen()
+            SearchScreen(modifier = modifier)
         }
         composable(Screen.Library.route) {
-            SongLoader(
-                modifier = modifier, // <-- FIX
+            LibraryScreen( // <-- This is your new screen
+                modifier = modifier,
                 viewModel = viewModel,
                 onProfileClick = onProfileClick
             )
         }
         composable(Screen.Stats.route) {
-            StatsScreen()
+            StatsScreen(modifier = modifier)
         }
         composable(Screen.Player.route) {
             PlayerScreen(
@@ -988,7 +998,7 @@ fun AppNavigation(
                 }
             )
         }
-        composable(Screen.History.route) {
+        composable("history") {
             HistoryScreen(modifier = modifier)
         }
     }
