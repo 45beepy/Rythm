@@ -107,6 +107,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 
 // Defines the screens in our app.
 sealed class Screen(
@@ -352,143 +359,73 @@ fun SearchScreen(modifier: Modifier = Modifier) {
 /**
  * This is the new "Library" screen, which contains your local songs.
  */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     modifier: Modifier = Modifier,
-    viewModel: PlayerViewModel,
+    viewModel: PlayerViewModel, // We still need this for clicks
     onProfileClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val contentResolver: ContentResolver = context.contentResolver
+    // --- NEW: Get the LibraryViewModel ---
+    val libraryViewModel: LibraryViewModel = viewModel()
+    val albums by libraryViewModel.albums
 
-    var songList by remember { mutableStateOf<List<Song>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    // --- NEW: Library filters ---
     var selectedFilter by remember { mutableStateOf("Albums") }
     val filters = listOf("Albums", "Artist", "Genre", "Language")
 
-    val mediaItemsList by remember {
-        derivedStateOf {
-            songList.map { song ->
-                MediaItem.Builder()
-                    .setUri(song.contentUri)
-                    .setMediaId(song.id.toString())
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(song.title)
-                            .setArtist(song.artist)
-                            .setArtworkUri(song.albumArtUri)
-                            .build()
-                    )
-                    .build()
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        // ... (Song loading logic is unchanged) ...
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
-        )
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
-        val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
-        val loadedSongs = mutableListOf<Song>()
-        val cursor = contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            null,
-            sortOrder
-        )
-        cursor?.use { c ->
-            val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val durationColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val albumIdColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            while (c.moveToNext()) {
-                val id = c.getLong(idColumn)
-                val title = c.getString(titleColumn)
-                val artist = c.getString(artistColumn)
-                val duration = c.getLong(durationColumn)
-                val albumId = c.getLong(albumIdColumn)
-                val contentUri: Uri = ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    id
-                )
-                val albumArtUri: Uri? = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"),
-                    albumId
-                )
-                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
-            }
-        }
-        songList = loadedSongs
-        isLoading = false
-    }
-
-    if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+    Column(modifier = modifier.fillMaxSize()) {
+        // Horizontal scrolling filter chips
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CircularProgressIndicator()
+            items(filters) { filter ->
+                FilterChip(
+                    selected = (filter == selectedFilter),
+                    onClick = { selectedFilter = filter },
+                    label = { Text(filter) }
+                )
+            }
         }
-    } else {
-        Column(modifier = modifier) {
-            // --- NEW: Horizontal scrolling filters ---
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filters) { filter ->
-                    FilterChip(
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter },
-                        label = { Text(filter) }
-                    )
+
+        // --- UPDATED: Show content based on filter ---
+        when (selectedFilter) {
+            "Albums" -> {
+                // Show a grid of albums
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2), // 2 columns
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(albums) { album ->
+                        AlbumGridItem(
+                            album = album,
+                            onClick = {
+                                // TODO: Implement "show songs by album" logic
+                                // For now, we'll just play the first song as a test
+                            }
+                        )
+                    }
                 }
             }
-
-            // --- Show content based on filter ---
-            // For now, only the "Albums" filter shows the song list
-            when (selectedFilter) {
-                "Albums" -> {
-                    SongList(
-                        modifier = Modifier.fillMaxSize(),
-                        songList = songList,
-                        onSongClick = { song ->
-                            val clickedSongIndex = mediaItemsList.indexOfFirst {
-                                it.mediaId == song.id.toString()
-                            }
-                            if (clickedSongIndex != -1) {
-                                viewModel.onSongClick(mediaItemsList, clickedSongIndex)
-                            }
-                        }
-                    )
+            "Artist" -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Artist view coming soon!")
                 }
-                "Artist" -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Artist view coming soon!")
-                    }
+            }
+            "Genre" -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Genre view coming soon!")
                 }
-                "Genre" -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Genre view coming soon!")
-                    }
-                }
-                "Language" -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Language view coming soon!")
-                    }
+            }
+            "Language" -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Language view coming soon!")
                 }
             }
         }
@@ -552,6 +489,43 @@ fun SongListItem(
         Text(
             text = song.duration.formatTime(),
             style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+fun AlbumGridItem(
+    album: Album,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        AsyncImage(
+            model = album.artworkUri,
+            contentDescription = album.title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f) // Make it a perfect square
+                .clip(RoundedCornerShape(8.dp)),
+            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+            error = rememberVectorPainter(Icons.Default.MusicNote),
+            contentScale = ContentScale.Crop // Crop to fill the square
+        )
+        Text(
+            text = album.title,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            text = album.artist,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -981,7 +955,7 @@ fun AppNavigation(
             SearchScreen(modifier = modifier)
         }
         composable(Screen.Library.route) {
-            LibraryScreen( // <-- This is your new screen
+            LibraryScreen(
                 modifier = modifier,
                 viewModel = viewModel,
                 onProfileClick = onProfileClick
