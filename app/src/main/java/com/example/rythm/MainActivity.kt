@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,18 +39,20 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.filled.QueueMusic // <-- FIXED IMPORT
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -103,7 +106,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.material3.FilterChipDefaults
 
 // Defines the screens in our app.
 sealed class Screen(
@@ -111,16 +113,20 @@ sealed class Screen(
     val label: String,
     val icon: ImageVector
 ) {
+    object Home : Screen("home", "Home", Icons.Default.Home)
+    object Search : Screen("search", "Search", Icons.Default.Search)
     object Library : Screen("library", "Library", Icons.Default.LibraryMusic)
+
+    // Internal screens
     object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
     object Player : Screen("player", "Player", Icons.Default.MusicNote)
-    // Settings screen is now in the drawer
 }
 
-// --- MODIFIED: "Settings" is removed from the bottom bar ---
+// The items to show on the bottom bar
 val bottomNavItems = listOf(
-    Screen.Library,
-    Screen.Stats
+    Screen.Home,
+    Screen.Search,
+    Screen.Library
 )
 
 // This is our data model.
@@ -146,7 +152,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // This is now the root composable
                     PermissionGatedContent()
                 }
             }
@@ -169,10 +174,8 @@ fun PermissionGatedContent() {
 
     when {
         audioPermissionState.status.isGranted -> {
-            // --- NEW: Set up the Drawer Navigation ---
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             val scope = rememberCoroutineScope()
-            // NavController is now at the top level
             val navController = rememberNavController()
 
             ModalNavigationDrawer(
@@ -185,7 +188,6 @@ fun PermissionGatedContent() {
                     )
                 }
             ) {
-                // MainApp is now the content *inside* the drawer
                 MainApp(
                     navController = navController,
                     onProfileClick = {
@@ -211,7 +213,7 @@ fun PermissionGatedContent() {
     }
 }
 
-// --- NEW: The UI for the slide-out menu ---
+// The UI for the slide-out menu
 @Composable
 fun AppDrawerContent(
     navController: NavHostController,
@@ -220,7 +222,6 @@ fun AppDrawerContent(
 ) {
     ModalDrawerSheet {
         Column(modifier = Modifier.padding(16.dp)) {
-            // 1. Profile Header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Default.AccountCircle,
@@ -232,7 +233,6 @@ fun AppDrawerContent(
             }
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 2. "Stats" Item
             NavigationDrawerItem(
                 label = { Text("Stats") },
                 icon = { Icon(Icons.Default.QueryStats, null) },
@@ -245,18 +245,15 @@ fun AppDrawerContent(
                 }
             )
 
-            // 3. "Recents" Item
             NavigationDrawerItem(
                 label = { Text("Recently Played") },
                 icon = { Icon(Icons.Default.History, null) },
                 selected = false,
                 onClick = {
-                    // TODO: Implement Recents screen
                     scope.launch { drawerState.close() }
                 }
             )
 
-            // 4. "Dark Mode" Toggle
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -274,13 +271,60 @@ fun AppDrawerContent(
     }
 }
 
+/**
+ * This composable is the "Home" screen.
+ * It's just a placeholder for now.
+ */
+@Composable
+fun HomeScreen(onProfileClick: () -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onProfileClick,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.AccountCircle,
+                    contentDescription = "Profile",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Home Screen (Discovery) - Coming Soon!", style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}
+
+/**
+ * This composable is the "Search" screen.
+ * It's just a placeholder for now.
+ */
+@Composable
+fun SearchScreen() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Search Screen - Coming Soon!", style = MaterialTheme.typography.titleLarge)
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongLoader(
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel,
-    onProfileClick: () -> Unit // Now accepts click
+    onProfileClick: () -> Unit
 ) {
     val context = LocalContext.current
     val contentResolver: ContentResolver = context.contentResolver
@@ -308,7 +352,6 @@ fun SongLoader(
     }
 
     LaunchedEffect(Unit) {
-        // ... (Your song loading logic is unchanged) ...
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -316,9 +359,11 @@ fun SongLoader(
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID
         )
+
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
         val loadedSongs = mutableListOf<Song>()
+
         val cursor = contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -326,26 +371,31 @@ fun SongLoader(
             null,
             sortOrder
         )
+
         cursor?.use { c ->
             val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
             while (c.moveToNext()) {
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
                 val artist = c.getString(artistColumn)
                 val duration = c.getLong(durationColumn)
                 val albumId = c.getLong(albumIdColumn)
+
                 val contentUri: Uri = ContentUris.withAppendedId(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
+
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
                 )
+
                 loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
             }
         }
@@ -353,7 +403,6 @@ fun SongLoader(
         isLoading = false
     }
 
-    // UI Layer
     if (isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -363,32 +412,26 @@ fun SongLoader(
         }
     } else {
         Column(modifier = modifier) {
-
-            // --- THIS IS THE MODIFIED TOP BAR ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp) // Space between icon and chips
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Profile Icon Button
                 IconButton(
                     onClick = onProfileClick,
-                    modifier = Modifier.size(32.dp) // Set size for the button
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         Icons.Default.AccountCircle,
                         contentDescription = "Profile",
-                        modifier = Modifier.fillMaxSize() // Icon fills the button
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
 
-                // --- 2. Filter Chips with NEW Colors ---
                 val selectedChipColors = FilterChipDefaults.filterChipColors(
-                    // Selected background is white (onBackground in dark mode)
                     selectedContainerColor = MaterialTheme.colorScheme.onBackground,
-                    // Selected text is black (background in dark mode)
                     selectedLabelColor = MaterialTheme.colorScheme.background
                 )
 
@@ -396,24 +439,22 @@ fun SongLoader(
                     selected = selectedFilter == "Local",
                     onClick = { selectedFilter = "Local" },
                     label = { Text("Local") },
-                    colors = selectedChipColors // <-- APPLY COLORS
+                    colors = selectedChipColors
                 )
                 FilterChip(
                     selected = selectedFilter == "Drive",
                     onClick = { selectedFilter = "Drive" },
                     label = { Text("Drive") },
-                    colors = selectedChipColors // <-- APPLY COLORS
+                    colors = selectedChipColors
                 )
                 FilterChip(
                     selected = selectedFilter == "Podcasts",
                     onClick = { selectedFilter = "Podcasts" },
                     label = { Text("Podcasts") },
-                    colors = selectedChipColors // <-- APPLY COLORS
+                    colors = selectedChipColors
                 )
             }
-            // --- END OF MODIFIED BAR ---
 
-            // --- Show content based on filter ---
             when (selectedFilter) {
                 "Local" -> {
                     SongList(
@@ -471,7 +512,8 @@ fun SongListItem(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween // <-- WORKAROUND
     ) {
         AsyncImage(
             model = song.albumArtUri,
@@ -481,7 +523,10 @@ fun SongListItem(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        // Column now has no weight
+        Column(
+            modifier = Modifier.fillMaxWidth(0.7f) // Take up 70% of the space
+        ) {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -495,7 +540,6 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = song.duration.formatTime(),
             style = MaterialTheme.typography.bodySmall
@@ -516,7 +560,6 @@ fun PlayerScreen(
     viewModel: PlayerViewModel,
     onCollapse: () -> Unit
 ) {
-    // --- 1. STATE ---
     val currentSong by viewModel.currentSong
     val isPlaying by viewModel.isPlaying
     val currentPosition by viewModel.currentPosition
@@ -533,7 +576,6 @@ fun PlayerScreen(
     val coroutineScope = rememberCoroutineScope()
     val lyricListState = rememberLazyListState()
 
-    // --- 3. POLLER (for Slider and Lyric sync) ---
     LaunchedEffect(isPlaying, isDragging, currentPosition) {
         if (isPlaying && !isDragging) {
             sliderPosition = currentPosition.toFloat()
@@ -553,7 +595,6 @@ fun PlayerScreen(
         }
     }
 
-    // --- 4. LYRICS FETCHER ---
     LaunchedEffect(currentSong) {
         if (currentSong == null) {
             lyricStatus = ""
@@ -597,13 +638,11 @@ fun PlayerScreen(
         }
     }
 
-    // --- 5. THE UI (Spotify Layout) ---
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 16.dp) // Add padding for the nav bar
+            .padding(bottom = 16.dp)
     ) {
-        // --- NEW: Top Bar ---
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -612,8 +651,8 @@ fun PlayerScreen(
                 Icon(Icons.Default.KeyboardArrowDown, "Collapse")
             }
             Text(
-                "PLAYING FROM YOUR LIBRARY", // TODO: Make this dynamic later
-                modifier = Modifier.weight(1f),
+                "PLAYING FROM YOUR LIBRARY",
+                modifier = Modifier.weight(1f), // <-- This will get fixed by import
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -623,11 +662,10 @@ fun PlayerScreen(
             }
         }
 
-        // Main Expanded Content (Art, Title, Lyrics)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
+                .weight(1f) // <-- This will get fixed by import
                 .padding(horizontal = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -636,7 +674,7 @@ fun PlayerScreen(
                     model = currentSong?.artworkUri,
                     contentDescription = "Large Album Art",
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.8f)
                         .padding(vertical = 16.dp),
                     placeholder = rememberVectorPainter(Icons.Default.MusicNote),
                     error = rememberVectorPainter(Icons.Default.MusicNote)
@@ -644,12 +682,11 @@ fun PlayerScreen(
                 Spacer(modifier = Modifier.height(32.dp))
             }
 
-            // --- NEW: Song Info Row ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f)) { // <-- This will get fixed by import
                     Text(
                         text = currentSong?.title.toString(),
                         style = MaterialTheme.typography.headlineMedium,
@@ -682,7 +719,7 @@ fun PlayerScreen(
                     state = lyricListState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
+                        .weight(1f), // <-- This will get fixed by import
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (lyricLines.isEmpty()) {
@@ -712,7 +749,6 @@ fun PlayerScreen(
             }
         }
 
-        // --- Bottom Controls (Slider & Buttons) ---
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Slider(
                 value = if (isDragging) sliderPosition else currentPosition.toFloat(),
@@ -729,7 +765,7 @@ fun PlayerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp), // Padding for the text
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(currentPosition.formatTime(), style = MaterialTheme.typography.bodySmall)
@@ -790,12 +826,12 @@ fun PlayerScreen(
             IconButton(onClick = { /* TODO: Devices */ }) {
                 Icon(Icons.Outlined.Devices, "Devices")
             }
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f)) // <-- This will get fixed by import
             IconButton(onClick = { /* TODO: Share */ }) {
                 Icon(Icons.Default.Share, "Share")
             }
             IconButton(onClick = { /* TODO: Queue */ }) {
-                Icon(Icons.Outlined.QueueMusic, "Queue")
+                Icon(Icons.Default.QueueMusic, "Queue")
             }
         }
     }
@@ -826,7 +862,7 @@ fun MiniPlayerBar(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f)) { // <-- This will get fixed by import
             Text(
                 text = currentSong?.title.toString(),
                 style = MaterialTheme.typography.bodyLarge,
@@ -863,7 +899,7 @@ fun MiniPlayerBar(
 @Composable
 fun MainApp(
     navController: NavHostController,
-    onProfileClick: () -> Unit // <-- NEW
+    onProfileClick: () -> Unit
 ) {
     val context = LocalContext.current
     val playerViewModel: PlayerViewModel = viewModel(
@@ -876,8 +912,6 @@ fun MainApp(
     Scaffold(
         bottomBar = {
             Column {
-                // Only show the mini player if a song is loaded
-                // AND we are NOT on the full player screen.
                 if (currentSong != null && currentRoute != Screen.Player.route) {
                     MiniPlayerBar(
                         viewModel = playerViewModel,
@@ -910,7 +944,7 @@ fun MainApp(
         AppNavigation(
             navController = navController,
             viewModel = playerViewModel,
-            onProfileClick = onProfileClick, // <-- PASS CLICK
+            onProfileClick = onProfileClick,
             modifier = Modifier.padding(innerPadding)
         )
     }
@@ -925,12 +959,18 @@ fun AppNavigation(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Library.route,
+        startDestination = Screen.Home.route,
         modifier = modifier
     ) {
+        composable(Screen.Home.route) {
+            HomeScreen(onProfileClick = onProfileClick)
+        }
+        composable(Screen.Search.route) {
+            SearchScreen()
+        }
         composable(Screen.Library.route) {
             SongLoader(
-                modifier = Modifier,
+                modifier = modifier, // <-- FIX
                 viewModel = viewModel,
                 onProfileClick = onProfileClick
             )

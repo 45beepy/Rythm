@@ -68,7 +68,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
         }
-        // onVolumeChanged removed
+        // onAudioSessionIdChanged removed
     }
 
     private fun startPolling() {
@@ -83,7 +83,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // --- Public Functions ---
-
     fun onSongClick(songList: List<MediaItem>, songIndex: Int) {
         mediaController?.let {
             it.setMediaItems(songList, songIndex, 0L)
@@ -111,8 +110,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun seekTo(position: Long) {
         mediaController?.seekTo(position)
     }
-
-    // setVolume function removed
 
     override fun onCleared() {
         mediaController?.removeListener(playerListener)
