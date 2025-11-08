@@ -62,7 +62,7 @@ dependencies {
     // --- PERMISSIONS ---
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
 
-    // --- MEDIA3 (THE "ENGINE" YOU ARE MISSING) ---
+    // --- MEDIA3 (THE "ENGINE") ---
     implementation("androidx.media3:media3-session:1.4.0")
     implementation("androidx.media3:media3-exoplayer:1.4.0")
     implementation("androidx.media3:media3-ui:1.4.0")
@@ -76,24 +76,24 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // --- ADD THESE LINES FOR ROOM ---
+    // --- ROOM (DATABASE) ---
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version") // For Kotlin Coroutines support
     ksp("androidx.room:room-compiler:$room_version") // The annotation processor
 
-    // For Navigation
+    // --- NAVIGATION ---
     val nav_version = "2.7.7"
     implementation("androidx.navigation:navigation-compose:$nav_version")
 
-    // For ViewModel
+    // --- VIEWMODEL ---
     val lifecycle_version = "2.8.3"
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycle_version")
 
+    // --- NETWORKING (for Lyrics) ---
     val retrofit_version = "2.11.0"
-    // Retrofit: The networking library
     implementation("com.squareup.retrofit2:retrofit:$retrofit_version")
-    // Gson Converter: To automatically convert JSON (from the API)
-    // into our Kotlin data classes
     implementation("com.squareup.retrofit2:converter-gson:$retrofit_version")
+
+    // The visualizer library is now 100% GONE
 }

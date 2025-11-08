@@ -11,12 +11,15 @@ import android.os.Bundle
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,11 +27,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow // <-- NEW IMPORT
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -46,13 +54,14 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +88,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalContext
@@ -91,29 +101,24 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType // <-- The one and only NavType import
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import coil.compose.AsyncImage
 import com.example.rythm.ui.theme.RythmTheme
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-import androidx.compose.material3.FilterChipDefaults
+// All 'primelab' visualizer imports are gone
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 
 // Defines the screens in our app.
 sealed class Screen(
@@ -125,19 +130,20 @@ sealed class Screen(
     object Search : Screen("search", "Search", Icons.Default.Search)
     object Library : Screen("library", "Library", Icons.Default.LibraryMusic)
 
-    // Internal screens
     object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
     object Player : Screen("player", "Player", Icons.Default.MusicNote)
+
+    object AlbumDetail : Screen("album_detail/{albumId}", "Album", Icons.Default.MusicNote) {
+        fun createRoute(albumId: Long) = "album_detail/$albumId"
+    }
 }
 
-// The items to show on the bottom bar
 val bottomNavItems = listOf(
     Screen.Home,
     Screen.Search,
     Screen.Library
 )
 
-// This is our data model.
 data class Song(
     val id: Long,
     val title: String,
@@ -146,6 +152,8 @@ data class Song(
     val contentUri: Uri,
     val albumArtUri: Uri?
 )
+
+// data class Album is now in LibraryModels.kt
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
@@ -167,7 +175,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// This composable manages the permission request.
 @SuppressLint("InlinedApi")
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -204,7 +211,6 @@ fun PermissionGatedContent() {
                 )
             }
         }
-
         audioPermissionState.status.shouldShowRationale -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Button(onClick = { audioPermissionState.launchPermissionRequest() }) {
@@ -212,7 +218,6 @@ fun PermissionGatedContent() {
                 }
             }
         }
-
         !audioPermissionState.status.isGranted && !audioPermissionState.status.shouldShowRationale -> {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Waiting for permission...")
@@ -221,7 +226,6 @@ fun PermissionGatedContent() {
     }
 }
 
-// The UI for the slide-out menu
 @Composable
 fun AppDrawerContent(
     navController: NavHostController,
@@ -240,7 +244,6 @@ fun AppDrawerContent(
                 Text("Rythm User", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(24.dp))
-
             NavigationDrawerItem(
                 label = { Text("Stats") },
                 icon = { Icon(Icons.Default.QueryStats, null) },
@@ -252,17 +255,14 @@ fun AppDrawerContent(
                     scope.launch { drawerState.close() }
                 }
             )
-
             NavigationDrawerItem(
                 label = { Text("Recently Played") },
                 icon = { Icon(Icons.Default.History, null) },
                 selected = false,
                 onClick = {
-                    navController.navigate("history")
                     scope.launch { drawerState.close() }
                 }
             )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -280,15 +280,20 @@ fun AppDrawerContent(
     }
 }
 
-/**
- * This composable is the "Home" screen.
- */
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onProfileClick: () -> Unit, modifier: Modifier = Modifier) {
-    var selectedFilter by remember { mutableStateOf("Local") }
+fun SongLoader(
+    modifier: Modifier = Modifier,
+    viewModel: PlayerViewModel,
+    onProfileClick: () -> Unit,
+    onAlbumClick: (Long) -> Unit
+) {
+    // --- NEW: State for the category filters ---
+    var selectedFilter by remember { mutableStateOf("Albums") }
 
     Column(modifier = modifier) {
+        // --- THIS IS THE MODIFIED TOP BAR ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -296,6 +301,7 @@ fun HomeScreen(onProfileClick: () -> Unit, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 1. Profile Icon Button
             IconButton(
                 onClick = onProfileClick,
                 modifier = Modifier.size(32.dp)
@@ -307,128 +313,161 @@ fun HomeScreen(onProfileClick: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
 
+            // --- 2. Filter Chips with NEW CATEGORIES ---
             val selectedChipColors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.onBackground,
                 selectedLabelColor = MaterialTheme.colorScheme.background
             )
 
             FilterChip(
-                selected = selectedFilter == "Local",
-                onClick = { selectedFilter = "Local" },
-                label = { Text("Local") },
+                selected = selectedFilter == "Albums",
+                onClick = { selectedFilter = "Albums" },
+                label = { Text("Albums") },
                 colors = selectedChipColors
             )
             FilterChip(
-                selected = selectedFilter == "Drive",
-                onClick = { selectedFilter = "Drive" },
-                label = { Text("Drive") },
+                selected = selectedFilter == "Artists",
+                onClick = { selectedFilter = "Artists" },
+                label = { Text("Artists") },
                 colors = selectedChipColors
             )
             FilterChip(
-                selected = selectedFilter == "Podcasts",
-                onClick = { selectedFilter = "Podcasts" },
-                label = { Text("Podcasts") },
+                selected = selectedFilter == "Genres",
+                onClick = { selectedFilter = "Genres" },
+                label = { Text("Genres") },
                 colors = selectedChipColors
             )
         }
+        // --- END OF MODIFIED BAR ---
 
-        // Placeholder content for Home
+        // --- Show content based on filter ---
+        when (selectedFilter) {
+            "Albums" -> {
+                // This is the AlbumGrid we already built
+                AlbumGrid(
+                    viewModel = viewModel,
+                    onAlbumClick = onAlbumClick
+                )
+            }
+            "Artists" -> {
+                // Placeholder for our next lesson
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Artists screen - Coming Soon!")
+                }
+            }
+            "Genres" -> {
+                // Placeholder for our next lesson
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Genres screen - Coming Soon!")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AlbumGrid(
+    viewModel: PlayerViewModel,
+    onAlbumClick: (Long) -> Unit
+) {
+    val context = LocalContext.current
+    val contentResolver: ContentResolver = context.contentResolver
+
+    var albumList by remember { mutableStateOf<List<Album>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        val projection = arrayOf(
+            MediaStore.Audio.Albums._ID,
+            MediaStore.Audio.Albums.ALBUM,
+            MediaStore.Audio.Albums.ARTIST
+        )
+        val sortOrder = "${MediaStore.Audio.Albums.ALBUM} ASC"
+        val loadedAlbums = mutableListOf<Album>()
+        val cursor = contentResolver.query(
+            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+            projection,
+            null,
+            null,
+            sortOrder
+        )
+        cursor?.use { c ->
+            val idColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Albums._ID)
+            val titleColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM)
+            val artistColumn = c.getColumnIndexOrThrow(MediaStore.Audio.Albums.ARTIST)
+            while (c.moveToNext()) {
+                val id = c.getLong(idColumn)
+                val title = c.getString(titleColumn)
+                val artist = c.getString(artistColumn)
+                val artworkUri: Uri = ContentUris.withAppendedId( // <-- Fixed typo
+                    Uri.parse("content://media/external/audio/albumart"),
+                    id
+                )
+                loadedAlbums.add(Album(id, title, artist, artworkUri)) // <-- Fixed typo
+            }
+        }
+        albumList = loadedAlbums
+        isLoading = false
+    }
+
+    if (isLoading) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Text("Home Screen (Discovery) - Coming Soon!", style = MaterialTheme.typography.titleLarge)
+            CircularProgressIndicator()
         }
-    }
-}
-
-/**
- * This composable is the "Search" screen.
- */
-@Composable
-fun SearchScreen(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Search Screen - Coming Soon!", style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-
-/**
- * This is the new "Library" screen, which contains your local songs.
- */
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun LibraryScreen(
-    modifier: Modifier = Modifier,
-    viewModel: PlayerViewModel, // We still need this for clicks
-    onProfileClick: () -> Unit
-) {
-    // --- NEW: Get the LibraryViewModel ---
-    val libraryViewModel: LibraryViewModel = viewModel()
-    val albums by libraryViewModel.albums
-
-    var selectedFilter by remember { mutableStateOf("Albums") }
-    val filters = listOf("Albums", "Artist", "Genre", "Language")
-
-    Column(modifier = modifier.fillMaxSize()) {
-        // Horizontal scrolling filter chips
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(filters) { filter ->
-                FilterChip(
-                    selected = (filter == selectedFilter),
-                    onClick = { selectedFilter = filter },
-                    label = { Text(filter) }
+            items(albumList) { album ->
+                AlbumGridItem(
+                    album = album,
+                    onClick = { onAlbumClick(album.id) }
                 )
             }
         }
+    }
+}
 
-        // --- UPDATED: Show content based on filter ---
-        when (selectedFilter) {
-            "Albums" -> {
-                // Show a grid of albums
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2), // 2 columns
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(albums) { album ->
-                        AlbumGridItem(
-                            album = album,
-                            onClick = {
-                                // TODO: Implement "show songs by album" logic
-                                // For now, we'll just play the first song as a test
-                            }
-                        )
-                    }
-                }
-            }
-            "Artist" -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Artist view coming soon!")
-                }
-            }
-            "Genre" -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Genre view coming soon!")
-                }
-            }
-            "Language" -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Language view coming soon!")
-                }
-            }
-        }
+@Composable
+fun AlbumGridItem(
+    album: Album,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        AsyncImage(
+            model = album.artworkUri, // <-- Fixed typo
+            contentDescription = album.title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+            error = rememberVectorPainter(Icons.Default.MusicNote)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = album.title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = album.artist,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -459,8 +498,7 @@ fun SongListItem(
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
             model = song.albumArtUri,
@@ -470,9 +508,7 @@ fun SongListItem(
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        Column(
-            modifier = Modifier.fillMaxWidth(0.7f)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -486,46 +522,10 @@ fun SongListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = song.duration.formatTime(),
             style = MaterialTheme.typography.bodySmall
-        )
-    }
-}
-
-@Composable
-fun AlbumGridItem(
-    album: Album,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        AsyncImage(
-            model = album.artworkUri,
-            contentDescription = album.title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f) // Make it a perfect square
-                .clip(RoundedCornerShape(8.dp)),
-            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-            error = rememberVectorPainter(Icons.Default.MusicNote),
-            contentScale = ContentScale.Crop // Crop to fill the square
-        )
-        Text(
-            text = album.title,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 8.dp)
-        )
-        Text(
-            text = album.artist,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -629,13 +629,13 @@ fun PlayerScreen(
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Default.KeyboardArrowDown, "Collapse")
             }
             Text(
                 "PLAYING FROM YOUR LIBRARY",
+                modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -814,7 +814,7 @@ fun PlayerScreen(
                 Icon(Icons.Default.Share, "Share")
             }
             IconButton(onClick = { /* TODO: Queue */ }) {
-                Icon(Icons.Default.QueueMusic, "Queue")
+                Icon(Icons.Outlined.QueueMusic, "Queue")
             }
         }
     }
@@ -946,23 +946,23 @@ fun AppNavigation(
         modifier = modifier
     ) {
         composable(Screen.Home.route) {
-            HomeScreen(
-                modifier = modifier,
-                onProfileClick = onProfileClick
-            )
+            HomeScreen(onProfileClick = onProfileClick)
         }
         composable(Screen.Search.route) {
-            SearchScreen(modifier = modifier)
+            SearchScreen()
         }
         composable(Screen.Library.route) {
-            LibraryScreen(
-                modifier = modifier,
+            SongLoader(
+                modifier = Modifier,
                 viewModel = viewModel,
-                onProfileClick = onProfileClick
+                onProfileClick = onProfileClick,
+                onAlbumClick = { albumId ->
+                    navController.navigate(Screen.AlbumDetail.createRoute(albumId))
+                }
             )
         }
         composable(Screen.Stats.route) {
-            StatsScreen(modifier = modifier)
+            StatsScreen()
         }
         composable(Screen.Player.route) {
             PlayerScreen(
@@ -972,8 +972,295 @@ fun AppNavigation(
                 }
             )
         }
-        composable("history") {
-            HistoryScreen(modifier = modifier)
+
+        composable(
+            route = Screen.AlbumDetail.route,
+            arguments = listOf(navArgument("albumId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val albumId = backStackEntry.arguments?.getLong("albumId")
+            if (albumId == null) {
+                navController.popBackStack()
+            } else {
+                AlbumDetailScreen(
+                    albumId = albumId,
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(onProfileClick: () -> Unit) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onProfileClick,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.AccountCircle,
+                    contentDescription = "Profile",
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Home Screen (Discovery) - Coming Soon!", style = MaterialTheme.typography.titleLarge)
+        }
+    }
+}
+
+@Composable
+fun SearchScreen() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("Search Screen - Coming Soon!", style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+
+@Composable
+fun AlbumDetailScreen(
+    albumId: Long,
+    viewModel: PlayerViewModel,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val contentResolver = context.contentResolver
+
+    var album by remember { mutableStateOf<Album?>(null) }
+    var songsInAlbum by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var mediaItemsList by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(albumId) {
+        isLoading = true
+        // 1. Load Album Details
+        contentResolver.query(
+            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Albums.ALBUM, MediaStore.Audio.Albums.ARTIST),
+            "${MediaStore.Audio.Albums._ID} = ?",
+            arrayOf(albumId.toString()),
+            null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val title = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM))
+                val artist = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ARTIST))
+                val artUri: Uri = ContentUris.withAppendedId(
+                    Uri.parse("content://media/external/audio/albumart"),
+                    albumId
+                )
+                album = Album(albumId, title, artist, artUri)
+            }
+        }
+
+        // 2. Load Songs from Album
+        val songProjection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.ALBUM_ID
+        )
+        val selection = "${MediaStore.Audio.Media.ALBUM_ID} = ?"
+        val selectionArgs = arrayOf(albumId.toString())
+        val sortOrder = "${MediaStore.Audio.Media.TRACK} ASC, ${MediaStore.Audio.Media.TITLE} ASC"
+
+        val loadedSongs = mutableListOf<Song>()
+        contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            songProjection,
+            selection,
+            selectionArgs,
+            sortOrder
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+
+            while(cursor.moveToNext()) {
+                val id = cursor.getLong(idCol)
+                val title = cursor.getString(titleCol)
+                val artist = cursor.getString(artistCol)
+                val duration = cursor.getLong(durationCol)
+                val albumArtUri: Uri? = ContentUris.withAppendedId(
+                    Uri.parse("content://media/external/audio/albumart"),
+                    cursor.getLong(albumIdCol)
+                )
+                val contentUri: Uri = ContentUris.withAppendedId(
+                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    id
+                )
+                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
+            }
+        }
+        songsInAlbum = loadedSongs
+
+        mediaItemsList = loadedSongs.map { song ->
+            MediaItem.Builder()
+                .setUri(song.contentUri)
+                .setMediaId(song.id.toString())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(song.title)
+                        .setArtist(song.artist)
+                        .setArtworkUri(song.albumArtUri)
+                        .build()
+                )
+                .build()
+        }
+
+        isLoading = false
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 16.dp)
+    ) {
+        item {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back")
+            }
+        }
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = album?.artworkUri, // <-- Fixed typo
+                    contentDescription = album?.title,
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .aspectRatio(1f)
+                        .padding(vertical = 16.dp),
+                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
+                    error = rememberVectorPainter(Icons.Default.MusicNote)
+                )
+                Text(
+                    text = album?.title ?: "Unknown Album",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.AccountCircle,
+                        contentDescription = "Artist",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = album?.artist ?: "Unknown Artist",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    text = "Album • ${album?.artist ?: "Unknown Artist"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                )
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { /*TODO: Add*/ }) {
+                    Icon(Icons.Default.Add, "Add to playlist", modifier = Modifier.size(28.dp))
+                }
+                IconButton(onClick = { /*TODO: Download*/ }) {
+                    Icon(Icons.Default.ArrowDownward, "Download", modifier = Modifier.size(28.dp))
+                }
+                IconButton(onClick = { /*TODO: More*/ }) {
+                    Icon(Icons.Default.MoreVert, "More", modifier = Modifier.size(28.dp))
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = { /*TODO: Shuffle*/ }) {
+                    Icon(Icons.Default.Shuffle, "Shuffle", modifier = Modifier.size(28.dp))
+                }
+                IconButton(
+                    onClick = {
+                        if (mediaItemsList.isNotEmpty()) {
+                            viewModel.onSongClick(mediaItemsList, 0)
+                        }
+                    },
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+        }
+
+        items(songsInAlbum) { song ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val index = mediaItemsList.indexOfFirst { it.mediaId == song.id.toString() }
+                        if (index != -1) {
+                            viewModel.onSongClick(mediaItemsList, index)
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = song.artist,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+                IconButton(onClick = { /*TODO: More*/ }) {
+                    Icon(Icons.Default.MoreVert, "More options")
+                }
+            }
         }
     }
 }
