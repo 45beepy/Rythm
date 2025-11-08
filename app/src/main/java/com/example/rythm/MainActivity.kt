@@ -120,6 +120,8 @@ sealed class Screen(
     // Internal screens
     object Stats : Screen("stats", "Stats", Icons.Default.QueryStats)
     object Player : Screen("player", "Player", Icons.Default.MusicNote)
+
+    object History : Screen("history", "History", Icons.Default.History)
 }
 
 // The items to show on the bottom bar
@@ -238,7 +240,7 @@ fun AppDrawerContent(
                 icon = { Icon(Icons.Default.QueryStats, null) },
                 selected = false,
                 onClick = {
-                    navController.navigate(Screen.Stats.route) {
+                    navController.navigate(Screen.History.route) {
                         popUpTo(navController.graph.startDestinationId)
                     }
                     scope.launch { drawerState.close() }
@@ -985,6 +987,9 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
             )
+        }
+        composable(Screen.History.route) {
+            HistoryScreen(modifier = modifier)
         }
     }
 }

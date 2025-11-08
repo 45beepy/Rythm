@@ -25,11 +25,13 @@ class PlaybackService : MediaSessionService() {
     private lateinit var mediaSession: MediaSession
     private lateinit var player: Player
     private val serviceJob = SupervisorJob()
-    // 2. The "scope" for our coroutines, which runs them in the background (Dispatchers.IO)
+    // The "scope" for our coroutines, which runs them in the background (Dispatchers.IO)
     private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
 
-    // 3. Get an instance of our database "doorman" (the DAO)
+    // Get an instance of our database "doorman" (the DAO)
     private val database by lazy { StatsDatabase.getDatabase(this).songStatDao() }
+    // Get an instance of our *new* history doorman
+    private val historyDatabase by lazy { StatsDatabase.getDatabase(this).playbackHistoryDao() }
 
     // This 'onCreate' is called when the Service is first created.
     @OptIn(UnstableApi::class)
@@ -41,7 +43,6 @@ class PlaybackService : MediaSessionService() {
 
         // 2. Create the MediaSession.
         mediaSession = MediaSession.Builder(this, player)
-            // This is the "nook and corner" we were missing.
             // This tells the session to automatically update its
             // metadata (like title, artist) from the MediaItem.
             .setCallback(object : MediaSession.Callback {
@@ -54,39 +55,26 @@ class PlaybackService : MediaSessionService() {
                     return super.onPlaybackResumption(mediaSession, controller)
                 }
             })
-            // --- END NEW CODE ---
             .build()
 
 
+        // --- NEW CODE: Listen for player events ---
         player.addListener(object : Player.Listener {
 
-            // This is called when a song *ends* and moves to the next
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                super.onMediaItemTransition(mediaItem, reason)
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    // The transition is automatic (song finished)
-                    // The 'previous' index is the one that just finished
-                    val finishedSongIndex = player.previousMediaItemIndex
-                    if (finishedSongIndex != C.INDEX_UNSET) {
-                        val finishedSong = player.getMediaItemAt(finishedSongIndex)
-                        updateSongStats(finishedSong)
-                    }
-                }
-            }
+            // This is called when a *new* song starts playing
+            override fun onIsPlayingChanged(playing: Boolean) {
+                super.onIsPlayingChanged(playing)
 
-            // This is called when the *very last* song finishes
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                super.onPlaybackStateChanged(playbackState)
-                if (playbackState == Player.STATE_ENDED) {
-                    // The playlist is over. The "current" index is the last song.
-                    val finishedSongIndex = player.currentMediaItemIndex
-                    if (finishedSongIndex != C.INDEX_UNSET) {
-                        val finishedSong = player.getMediaItemAt(finishedSongIndex)
-                        updateSongStats(finishedSong)
+                // We only care about when the player *starts* playing
+                if (playing) {
+                    player.currentMediaItem?.let { startedSong ->
+                        // Update its stats in the database!
+                        logSongPlay(startedSong)
                     }
                 }
             }
         })
+        // --- END OF NEW CODE ---
     }
 
     // This is called when our UI (the Activity)
@@ -98,8 +86,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     // This 'onDestroy' is called when the Service is being shut down.
-    // We must release our player and session to free up resources.
-    //regular comment
     override fun onDestroy() {
         // Check if player has been initialized before releasing
         if (::player.isInitialized) {
@@ -112,45 +98,49 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 
-    private fun updateSongStats(mediaItem: MediaItem) {
-        // Launch a new background task
+    private fun logSongPlay(mediaItem: MediaItem) {
         serviceScope.launch {
             try {
                 // Get the song's ID and details
                 val songId = mediaItem.mediaId.toLongOrNull() ?: return@launch
-                val duration = player.duration
                 val title = mediaItem.mediaMetadata.title.toString()
                 val artist = mediaItem.mediaMetadata.artist.toString()
 
-                // If the song was too short (e.g., a skip), don't count it
-                if (duration < 10000) { // e.g., don't log plays under 10 seconds
-                    return@launch
-                }
+                // We don't know the duration yet, so we'll log it when it's ready.
+                // For now, let's just log the history item.
 
-                // 1. GET the current stats from the database
+                // --- THIS IS THE NEW PART ---
+                // Log this play event to our history table
+                val historyItem = PlaybackHistory(
+                    songId = songId,
+                    title = title,
+                    artist = artist,
+                    timestamp = System.currentTimeMillis() // Log the exact time it started
+                )
+                historyDatabase.addHistoryItem(historyItem)
+                // --- END OF NEW PART ---
+
+                // --- This is your existing stats logic ---
+                // We can still update the play count here
                 val currentStat = database.getStatById(songId)
-
                 if (currentStat == null) {
-                    // 2a. INSERT a new record if it's the first play
                     val newStat = SongStat(
                         id = songId,
                         title = title,
                         artist = artist,
                         playCount = 1,
-                        totalPlayTimeMs = duration
+                        totalPlayTimeMs = 0 // We don't know duration yet
                     )
                     database.upsertStat(newStat)
                 } else {
-                    // 2b. UPDATE the existing record
                     val updatedStat = currentStat.copy(
-                        playCount = currentStat.playCount + 1,
-                        totalPlayTimeMs = currentStat.totalPlayTimeMs + duration
+                        playCount = currentStat.playCount + 1
+                        // We're no longer updating totalPlayTimeMs here
                     )
                     database.upsertStat(updatedStat)
                 }
 
             } catch (e: Exception) {
-                // Log any errors (optional but good practice)
                 e.printStackTrace()
             }
         }
