@@ -6,9 +6,13 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.content.Context // <-- NEW IMPORT
+import android.media.MediaScannerConnection // <-- NEW IMPORT
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment // <-- NEW IMPORT
 import android.provider.MediaStore
+import android.widget.Toast // <-- NEW IMPORT
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -32,7 +36,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
@@ -47,6 +53,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Refresh // <-- NEW IMPORT
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -101,7 +108,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType // <-- The one and only NavType import
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -113,7 +120,6 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberPermissionState
 import com.google.accompanist.permissions.shouldShowRationale
-// All 'primelab' visualizer imports are gone
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -153,7 +159,7 @@ data class Song(
     val albumArtUri: Uri?
 )
 
-// data class Album is now in LibraryModels.kt
+
 
 class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
@@ -232,6 +238,8 @@ fun AppDrawerContent(
     scope: CoroutineScope,
     drawerState: DrawerState
 ) {
+    val context = LocalContext.current // <-- ADDED CONTEXT
+
     ModalDrawerSheet {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -244,6 +252,7 @@ fun AppDrawerContent(
                 Text("Rythm User", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(24.dp))
+
             NavigationDrawerItem(
                 label = { Text("Stats") },
                 icon = { Icon(Icons.Default.QueryStats, null) },
@@ -255,6 +264,7 @@ fun AppDrawerContent(
                     scope.launch { drawerState.close() }
                 }
             )
+
             NavigationDrawerItem(
                 label = { Text("Recently Played") },
                 icon = { Icon(Icons.Default.History, null) },
@@ -263,6 +273,27 @@ fun AppDrawerContent(
                     scope.launch { drawerState.close() }
                 }
             )
+
+            // --- THIS IS THE NEWLY ADDED BLOCK ---
+            NavigationDrawerItem(
+                label = { Text("Rescan Library") },
+                icon = { Icon(Icons.Default.Refresh, null) },
+                selected = false,
+                onClick = {
+                    Toast.makeText(context, "Starting library rescan...", Toast.LENGTH_SHORT).show()
+                    val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(musicDir.absolutePath),
+                        null
+                    ) { path, uri ->
+                        // Scan is complete
+                    }
+                    scope.launch { drawerState.close() }
+                }
+            )
+            // --- END OF NEW BLOCK ---
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -289,11 +320,9 @@ fun SongLoader(
     onProfileClick: () -> Unit,
     onAlbumClick: (Long) -> Unit
 ) {
-    // --- NEW: State for the category filters ---
-    var selectedFilter by remember { mutableStateOf("Albums") }
+    var selectedFilter by remember { mutableStateOf("Local") }
 
     Column(modifier = modifier) {
-        // --- THIS IS THE MODIFIED TOP BAR ---
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -301,7 +330,6 @@ fun SongLoader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Profile Icon Button
             IconButton(
                 onClick = onProfileClick,
                 modifier = Modifier.size(32.dp)
@@ -312,53 +340,44 @@ fun SongLoader(
                     modifier = Modifier.fillMaxSize()
                 )
             }
-
-            // --- 2. Filter Chips with NEW CATEGORIES ---
             val selectedChipColors = FilterChipDefaults.filterChipColors(
                 selectedContainerColor = MaterialTheme.colorScheme.onBackground,
                 selectedLabelColor = MaterialTheme.colorScheme.background
             )
-
             FilterChip(
-                selected = selectedFilter == "Albums",
-                onClick = { selectedFilter = "Albums" },
-                label = { Text("Albums") },
+                selected = selectedFilter == "Local",
+                onClick = { selectedFilter = "Local" },
+                label = { Text("Local") },
                 colors = selectedChipColors
             )
             FilterChip(
-                selected = selectedFilter == "Artists",
-                onClick = { selectedFilter = "Artists" },
-                label = { Text("Artists") },
+                selected = selectedFilter == "Drive",
+                onClick = { selectedFilter = "Drive" },
+                label = { Text("Drive") },
                 colors = selectedChipColors
             )
             FilterChip(
-                selected = selectedFilter == "Genres",
-                onClick = { selectedFilter = "Genres" },
-                label = { Text("Genres") },
+                selected = selectedFilter == "Podcasts",
+                onClick = { selectedFilter = "Podcasts" },
+                label = { Text("Podcasts") },
                 colors = selectedChipColors
             )
         }
-        // --- END OF MODIFIED BAR ---
-
-        // --- Show content based on filter ---
         when (selectedFilter) {
-            "Albums" -> {
-                // This is the AlbumGrid we already built
+            "Local" -> {
                 AlbumGrid(
                     viewModel = viewModel,
                     onAlbumClick = onAlbumClick
                 )
             }
-            "Artists" -> {
-                // Placeholder for our next lesson
+            "Drive" -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Artists screen - Coming Soon!")
+                    Text("Drive feature coming soon!")
                 }
             }
-            "Genres" -> {
-                // Placeholder for our next lesson
+            "Podcasts" -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Genres screen - Coming Soon!")
+                    Text("Podcasts feature coming soon!")
                 }
             }
         }
@@ -399,11 +418,11 @@ fun AlbumGrid(
                 val id = c.getLong(idColumn)
                 val title = c.getString(titleColumn)
                 val artist = c.getString(artistColumn)
-                val artworkUri: Uri = ContentUris.withAppendedId( // <-- Fixed typo
+                val artworkUri: Uri = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     id
                 )
-                loadedAlbums.add(Album(id, title, artist, artworkUri)) // <-- Fixed typo
+                loadedAlbums.add(Album(id, title, artist, artworkUri))
             }
         }
         albumList = loadedAlbums
@@ -446,7 +465,7 @@ fun AlbumGridItem(
             .clickable { onClick() }
     ) {
         AsyncImage(
-            model = album.artworkUri, // <-- Fixed typo
+            model = album.artworkUri,
             contentDescription = album.title,
             modifier = Modifier
                 .fillMaxWidth()
@@ -471,7 +490,7 @@ fun AlbumGridItem(
     }
 }
 
-
+// We keep SongList and SongListItem for the AlbumDetailScreen
 @Composable
 fun SongList(
     modifier: Modifier = Modifier,
@@ -497,17 +516,10 @@ fun SongListItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        AsyncImage(
-            model = song.albumArtUri,
-            contentDescription = song.title,
-            modifier = Modifier.size(40.dp),
-            placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-            error = rememberVectorPainter(Icons.Default.MusicNote)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = song.title,
@@ -517,16 +529,15 @@ fun SongListItem(
             )
             Text(
                 text = song.artist,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
-        Text(
-            text = song.duration.formatTime(),
-            style = MaterialTheme.typography.bodySmall
-        )
+        IconButton(onClick = { /*TODO: More*/ }) {
+            Icon(Icons.Default.MoreVert, "More options")
+        }
     }
 }
 
@@ -629,13 +640,13 @@ fun PlayerScreen(
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Default.KeyboardArrowDown, "Collapse")
             }
             Text(
                 "PLAYING FROM YOUR LIBRARY",
-                modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -804,12 +815,12 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = { /* TODO: Devices */ }) {
                 Icon(Icons.Outlined.Devices, "Devices")
             }
-            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = { /* TODO: Share */ }) {
                 Icon(Icons.Default.Share, "Share")
             }
@@ -1058,11 +1069,11 @@ fun AlbumDetailScreen(
             if (cursor.moveToFirst()) {
                 val title = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM))
                 val artist = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ARTIST))
-                val artUri: Uri = ContentUris.withAppendedId(
+                val artworkUri: Uri = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     albumId
                 )
-                album = Album(albumId, title, artist, artUri)
+                album = Album(albumId, title, artist, artworkUri)
             }
         }
 
@@ -1087,7 +1098,7 @@ fun AlbumDetailScreen(
             sortOrder
         )?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE) // <-- FIXED TYPO
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
@@ -1145,7 +1156,7 @@ fun AlbumDetailScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 AsyncImage(
-                    model = album?.artworkUri, // <-- Fixed typo
+                    model = album?.artworkUri,
                     contentDescription = album?.title,
                     modifier = Modifier
                         .fillMaxWidth(0.7f)
@@ -1193,38 +1204,43 @@ fun AlbumDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = { /*TODO: Add*/ }) {
-                    Icon(Icons.Default.Add, "Add to playlist", modifier = Modifier.size(28.dp))
+                Row {
+                    IconButton(onClick = { /*TODO: Add*/ }) {
+                        Icon(Icons.Default.Add, "Add to playlist", modifier = Modifier.size(28.dp))
+                    }
+                    IconButton(onClick = { /*TODO: Download*/ }) {
+                        Icon(Icons.Default.ArrowDownward, "Download", modifier = Modifier.size(28.dp))
+                    }
+                    IconButton(onClick = { /*TODO: More*/ }) {
+                        Icon(Icons.Default.MoreVert, "More", modifier = Modifier.size(28.dp))
+                    }
                 }
-                IconButton(onClick = { /*TODO: Download*/ }) {
-                    Icon(Icons.Default.ArrowDownward, "Download", modifier = Modifier.size(28.dp))
-                }
-                IconButton(onClick = { /*TODO: More*/ }) {
-                    Icon(Icons.Default.MoreVert, "More", modifier = Modifier.size(28.dp))
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = { /*TODO: Shuffle*/ }) {
-                    Icon(Icons.Default.Shuffle, "Shuffle", modifier = Modifier.size(28.dp))
-                }
-                IconButton(
-                    onClick = {
-                        if (mediaItemsList.isNotEmpty()) {
-                            viewModel.onSongClick(mediaItemsList, 0)
-                        }
-                    },
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        "Play",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(36.dp)
-                    )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { /*TODO: Shuffle*/ }) {
+                        Icon(Icons.Default.Shuffle, "Shuffle", modifier = Modifier.size(28.dp))
+                    }
+                    IconButton(
+                        onClick = {
+                            if (mediaItemsList.isNotEmpty()) {
+                                viewModel.onSongClick(mediaItemsList, 0)
+                            }
+                        },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            "Play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1240,7 +1256,8 @@ fun AlbumDetailScreen(
                         }
                     }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

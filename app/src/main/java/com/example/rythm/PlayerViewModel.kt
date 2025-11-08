@@ -15,6 +15,8 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
+import java.lang.Exception
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -36,6 +38,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     val songDuration: State<Long> = _songDuration
 
     private val sessionToken: SessionToken
+
+    // --- NEW: Get a database instance ---
+    private val database by lazy { StatsDatabase.getDatabase(getApplication()).songStatDao() }
 
     init {
         sessionToken = SessionToken(
@@ -64,6 +69,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
             _currentSong.value = mediaMetadata
             _songDuration.value = mediaController?.duration?.coerceAtLeast(0L) ?: 0L
+
+            // --- NEW: This fires every time a new song starts ---
+            mediaController?.currentMediaItem?.let {
+                viewModelScope.launch(Dispatchers.IO) {
+                    incrementPlayCount(it)
+                }
+            }
+            // --- END NEW ---
         }
         override fun onIsPlayingChanged(playing: Boolean) {
             _isPlaying.value = playing
@@ -89,6 +102,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             it.prepare()
             it.play()
         }
+        // NOTE: We no longer update the count here,
+        // the 'onMediaMetadataChanged' listener does it automatically.
     }
 
     fun playPause() {
@@ -110,6 +125,38 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun seekTo(position: Long) {
         mediaController?.seekTo(position)
     }
+
+    // --- NEW: Logic to update the play count in the database ---
+    private suspend fun incrementPlayCount(mediaItem: MediaItem) {
+        try {
+            val songId = mediaItem.mediaId.toLongOrNull() ?: return
+            val title = mediaItem.mediaMetadata.title.toString()
+            val artist = mediaItem.mediaMetadata.artist.toString()
+
+            val currentStat = database.getStatById(songId)
+
+            if (currentStat == null) {
+                // First time playing: insert new record
+                val newStat = SongStat(
+                    id = songId,
+                    title = title,
+                    artist = artist,
+                    playCount = 1,
+                    totalPlayTimeMs = 0 // Play time is handled by the service
+                )
+                database.upsertStat(newStat)
+            } else {
+                // Already exists: just update the play count
+                val updatedStat = currentStat.copy(
+                    playCount = currentStat.playCount + 1
+                )
+                database.upsertStat(updatedStat)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    // --- END NEW ---
 
     override fun onCleared() {
         mediaController?.removeListener(playerListener)
