@@ -39,6 +39,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val sessionToken: SessionToken
 
+    private val _isPlayerSheetVisible = mutableStateOf(false)
+    val isPlayerSheetVisible: State<Boolean> = _isPlayerSheetVisible
+
+    fun showPlayer() {
+        _isPlayerSheetVisible.value = true
+    }
+
+    fun hidePlayer() {
+        _isPlayerSheetVisible.value = false
+    }
+
     // --- NEW: Get a database instance ---
     private val database by lazy { StatsDatabase.getDatabase(getApplication()).songStatDao() }
 

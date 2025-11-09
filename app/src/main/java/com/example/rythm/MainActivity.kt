@@ -6,13 +6,9 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.ContentUris
-import android.content.Context // <-- NEW IMPORT
-import android.media.MediaScannerConnection // <-- NEW IMPORT
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment // <-- NEW IMPORT
 import android.provider.MediaStore
-import android.widget.Toast // <-- NEW IMPORT
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -43,7 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.FavoriteBorder
+// import androidx.compose.material.icons.filled.FavoriteBorder // <-- REMOVED
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -53,15 +49,15 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueryStats
-import androidx.compose.material.icons.filled.Refresh // <-- NEW IMPORT
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.TextSnippet // <-- NEW IMPORT
 import androidx.compose.material.icons.outlined.Devices
-import androidx.compose.material.icons.outlined.QueueMusic
+// import androidx.compose.material.icons.outlined.QueueMusic // <-- REPLACED
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerState
@@ -156,7 +152,8 @@ data class Song(
     val artist: String,
     val duration: Long,
     val contentUri: Uri,
-    val albumArtUri: Uri?
+    val albumArtUri: Uri?,
+    val fileType: String? // <-- NEW
 )
 
 
@@ -238,8 +235,7 @@ fun AppDrawerContent(
     scope: CoroutineScope,
     drawerState: DrawerState
 ) {
-    val context = LocalContext.current // <-- ADDED CONTEXT
-
+    // ... (This function is unchanged)
     ModalDrawerSheet {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -252,7 +248,6 @@ fun AppDrawerContent(
                 Text("Rythm User", style = MaterialTheme.typography.titleMedium)
             }
             Spacer(modifier = Modifier.height(24.dp))
-
             NavigationDrawerItem(
                 label = { Text("Stats") },
                 icon = { Icon(Icons.Default.QueryStats, null) },
@@ -264,7 +259,6 @@ fun AppDrawerContent(
                     scope.launch { drawerState.close() }
                 }
             )
-
             NavigationDrawerItem(
                 label = { Text("Recently Played") },
                 icon = { Icon(Icons.Default.History, null) },
@@ -273,27 +267,7 @@ fun AppDrawerContent(
                     scope.launch { drawerState.close() }
                 }
             )
-
-            // --- THIS IS THE NEWLY ADDED BLOCK ---
-            NavigationDrawerItem(
-                label = { Text("Rescan Library") },
-                icon = { Icon(Icons.Default.Refresh, null) },
-                selected = false,
-                onClick = {
-                    Toast.makeText(context, "Starting library rescan...", Toast.LENGTH_SHORT).show()
-                    val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-                    MediaScannerConnection.scanFile(
-                        context,
-                        arrayOf(musicDir.absolutePath),
-                        null
-                    ) { path, uri ->
-                        // Scan is complete
-                    }
-                    scope.launch { drawerState.close() }
-                }
-            )
-            // --- END OF NEW BLOCK ---
-
+            // ... (Rescan Library button would go here if we add it) ...
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -320,6 +294,7 @@ fun SongLoader(
     onProfileClick: () -> Unit,
     onAlbumClick: (Long) -> Unit
 ) {
+    // ... (This function is unchanged) ...
     var selectedFilter by remember { mutableStateOf("Local") }
 
     Column(modifier = modifier) {
@@ -389,6 +364,7 @@ fun AlbumGrid(
     viewModel: PlayerViewModel,
     onAlbumClick: (Long) -> Unit
 ) {
+    // ... (This function is unchanged) ...
     val context = LocalContext.current
     val contentResolver: ContentResolver = context.contentResolver
 
@@ -459,6 +435,7 @@ fun AlbumGridItem(
     album: Album,
     onClick: () -> Unit
 ) {
+    // ... (This function is unchanged) ...
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -490,7 +467,7 @@ fun AlbumGridItem(
     }
 }
 
-// We keep SongList and SongListItem for the AlbumDetailScreen
+// We'll keep SongList & SongListItem for the AlbumDetailScreen
 @Composable
 fun SongList(
     modifier: Modifier = Modifier,
@@ -640,13 +617,13 @@ fun PlayerScreen(
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = onCollapse) {
                 Icon(Icons.Default.KeyboardArrowDown, "Collapse")
             }
             Text(
                 "PLAYING FROM YOUR LIBRARY",
+                modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
@@ -694,19 +671,22 @@ fun PlayerScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(onClick = { /* TODO: Favorite Logic */ }) {
-                    Icon(
-                        imageVector = Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+
+                // --- HEART ICON REMOVED, FILE TYPE ADDED ---
+                val fileType = currentSong?.extras?.getString("fileType") ?: ""
+                Text(
+                    text = fileType.uppercase(),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
 
-            TextButton(onClick = { showLyrics = !showLyrics }) {
-                Text(if (showLyrics) "Hide Lyrics" else "Show Lyrics")
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+            // --- "SHOW LYRICS" BUTTON REMOVED ---
+            // TextButton(onClick = { showLyrics = !showLyrics }) {
+            //     Text(if (showLyrics) "Hide Lyrics" else "Show Lyrics")
+            // }
+            Spacer(modifier = Modifier.height(16.dp)) // Kept for spacing
 
             if (showLyrics) {
                 LazyColumn(
@@ -815,17 +795,23 @@ fun PlayerScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { /* TODO: Devices */ }) {
                 Icon(Icons.Outlined.Devices, "Devices")
             }
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = { /* TODO: Share */ }) {
                 Icon(Icons.Default.Share, "Share")
             }
-            IconButton(onClick = { /* TODO: Queue */ }) {
-                Icon(Icons.Outlined.QueueMusic, "Queue")
+
+            // --- "QUEUE" ICON IS NOW LYRICS TOGGLE ---
+            IconButton(onClick = { showLyrics = !showLyrics }) {
+                Icon(
+                    imageVector = Icons.Default.TextSnippet,
+                    contentDescription = if (showLyrics) "Hide Lyrics" else "Show Lyrics",
+                    tint = if (showLyrics) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
             }
         }
     }
@@ -1056,6 +1042,15 @@ fun AlbumDetailScreen(
     var mediaItemsList by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
+    // --- Helper function to format MIME type ---
+    fun formatMimeType(mimeType: String?): String {
+        return when (mimeType) {
+            "audio/flac" -> "FLAC"
+            "audio/mpeg" -> "MP3"
+            else -> "AUDIO"
+        }
+    }
+
     LaunchedEffect(albumId) {
         isLoading = true
         // 1. Load Album Details
@@ -1083,7 +1078,8 @@ fun AlbumDetailScreen(
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.MIME_TYPE // <-- NEW
         )
         val selection = "${MediaStore.Audio.Media.ALBUM_ID} = ?"
         val selectionArgs = arrayOf(albumId.toString())
@@ -1098,16 +1094,18 @@ fun AlbumDetailScreen(
             sortOrder
         )?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE) // <-- FIXED TYPO
+            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+            val mimeTypeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE) // <-- NEW
 
             while(cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val title = cursor.getString(titleCol)
                 val artist = cursor.getString(artistCol)
                 val duration = cursor.getLong(durationCol)
+                val fileType = formatMimeType(cursor.getString(mimeTypeCol)) // <-- NEW
                 val albumArtUri: Uri? = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"),
                     cursor.getLong(albumIdCol)
@@ -1116,12 +1114,15 @@ fun AlbumDetailScreen(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     id
                 )
-                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri))
+                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri, fileType)) // <-- NEW
             }
         }
         songsInAlbum = loadedSongs
 
         mediaItemsList = loadedSongs.map { song ->
+            val extras = Bundle() // <-- NEW
+            extras.putString("fileType", song.fileType) // <-- NEW
+
             MediaItem.Builder()
                 .setUri(song.contentUri)
                 .setMediaId(song.id.toString())
@@ -1130,6 +1131,7 @@ fun AlbumDetailScreen(
                         .setTitle(song.title)
                         .setArtist(song.artist)
                         .setArtworkUri(song.albumArtUri)
+                        .setExtras(extras) // <-- NEW
                         .build()
                 )
                 .build()
