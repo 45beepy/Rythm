@@ -65,6 +65,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -467,6 +469,14 @@ fun PlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(bottom = 16.dp)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    // Detect a downward swipe
+                    if (dragAmount > 20) {
+                        onCollapse()
+                    }
+                }
+            }
     ) {
         Row(
             modifier = Modifier

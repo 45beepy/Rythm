@@ -72,7 +72,7 @@ fun StatsListItem(stat: SongStat) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column { // <-- MODIFIER REMOVED
+        Column(modifier = Modifier.fillMaxWidth(0.8f)) { // <-- Workaround
             Text(
                 text = stat.title,
                 style = MaterialTheme.typography.bodyLarge,

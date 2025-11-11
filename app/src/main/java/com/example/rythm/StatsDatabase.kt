@@ -5,12 +5,13 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-// 1. ADDED PlaybackHistory::class and BUMPED version to 2
-@Database(entities = [SongStat::class, PlaybackHistory::class], version = 2)
+// --- STEP 1: Add PlaybackHistory to the 'entities' list ---
+@Database(entities = [SongStat::class, PlaybackHistory::class], version = 1)
 abstract class StatsDatabase : RoomDatabase() {
 
+    // --- STEP 2: Add the new DAO function ---
     abstract fun songStatDao(): SongStatDao
-    abstract fun playbackHistoryDao(): PlaybackHistoryDao // 2. ADDED the new DAO
+    abstract fun playbackHistoryDao(): PlaybackHistoryDao // <-- ADD THIS LINE
 
     companion object {
         @Volatile
@@ -22,10 +23,7 @@ abstract class StatsDatabase : RoomDatabase() {
                     context.applicationContext,
                     StatsDatabase::class.java,
                     "stats_database"
-                )
-                    // 3. ADDED this. Wipes the DB on schema change.
-                    .fallbackToDestructiveMigration()
-                    .build()
+                ).build() // Note: In a real app, we'd handle migration
                 INSTANCE = instance
                 instance
             }
