@@ -1,5 +1,9 @@
 package com.example.rythm
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import kotlin.math.max // optional if you use max somewhere
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
@@ -71,6 +75,19 @@ import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope as KCoroutineScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+
 
 // ---------- Navigation + models ----------
 sealed class Screen(
@@ -660,44 +677,73 @@ fun MiniPlayerBar(
     val isPlaying by viewModel.isPlaying
     val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
+    // small animation for art and play icon when song changes or playing state changes
+    val artScale by animateFloatAsState(
+        targetValue = if (currentSong != null) 1f else 0.9f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium)
+    )
+    val buttonScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.05f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow)
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // album art with animated size/scale
         AsyncImage(
             model = currentSong?.artworkUri,
-            contentDescription = currentSong?.title.toString(),
-            modifier = Modifier.size(40.dp),
+            contentDescription = currentSong?.title?.toString() ?: "No song",
+            modifier = Modifier
+                .size((40.dp * artScale).coerceAtLeast(32.dp))
+                .clip(CircleShape),
             placeholder = rememberVectorPainter(Icons.Default.MusicNote),
             error = rememberVectorPainter(Icons.Default.MusicNote)
         )
-        Spacer(Modifier.width(8.dp))
+
+        Spacer(modifier = Modifier.width(8.dp))
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = currentSong?.title.toString(),
+                text = currentSong?.title?.toString() ?: "Unknown",
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = currentSong?.artist.toString(),
-                style = MaterialTheme.typography.bodyMedium,
+                text = currentSong?.artist?.toString() ?: "",
+                style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
         }
-        Spacer(Modifier.width(8.dp))
-        IconButton(onClick = { viewModel.playPause() }) {
-            Icon(playPauseIcon, contentDescription = "Play/Pause", modifier = Modifier.size(32.dp))
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // play/pause button with subtle scale animation
+        IconButton(
+            onClick = { viewModel.playPause() },
+            modifier = Modifier.size(40.dp * buttonScale) // Dp * Float is supported
+        ) {
+            Icon(
+                imageVector = playPauseIcon,
+                contentDescription = "Play/Pause",
+                modifier = Modifier.size(24.dp)
+            )
         }
+        // optional skip next
         IconButton(onClick = { viewModel.skipNext() }) {
-            Icon(Icons.Default.SkipNext, "Skip Next", modifier = Modifier.size(32.dp))
+            Icon(Icons.Default.SkipNext, contentDescription = "Skip Next")
         }
     }
 }
+
+
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
@@ -716,11 +762,31 @@ fun MainApp(
     Scaffold(
         bottomBar = {
             Column {
-                if (currentSong != null && currentRoute != Screen.Player.route) {
-                    MiniPlayerBar(viewModel = playerViewModel) {
-                        navController.navigate(Screen.Player.route)
-                    }
+                // Animated mini player: slide up from bottom when visible, slide down when hidden
+                val showMini = currentSong != null && currentRoute != Screen.Player.route
+
+                AnimatedVisibility(
+                    visible = showMini,
+                    enter = slideInVertically(
+                        // start the mini player just below the screen
+                        initialOffsetY = { fullHeight -> fullHeight / 2 },
+                        animationSpec = tween(durationMillis = 300)
+                    ) + fadeIn(animationSpec = tween(200)),
+                    exit = slideOutVertically(
+                        targetOffsetY = { fullHeight -> fullHeight / 2 },
+                        animationSpec = tween(durationMillis = 250)
+                    ) + fadeOut(animationSpec = tween(180))
+                ) {
+                    // Animated mini bar composable
+                    MiniPlayerBar(
+                        viewModel = playerViewModel,
+                        onClick = {
+                            // navigate to full player with default nav animation — this can be animated too
+                            navController.navigate(Screen.Player.route)
+                        }
+                    )
                 }
+
                 NavigationBar {
                     bottomNavItems.forEach { screen ->
                         NavigationBarItem(
@@ -747,6 +813,7 @@ fun MainApp(
             modifier = Modifier.padding(innerPadding)
         )
     }
+
 }
 
 @Composable
