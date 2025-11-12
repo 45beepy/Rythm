@@ -3,7 +3,22 @@ package com.example.rythm
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import kotlin.math.max // optional if you use max somewhere
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.InfiniteRepeatableSpec
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
@@ -85,6 +100,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 
@@ -636,8 +652,58 @@ fun PlayerScreen(
             IconButton(onClick = { viewModel.skipPrevious() }) {
                 Icon(Icons.Default.SkipPrevious, "Skip Previous", modifier = Modifier.size(40.dp))
             }
-            IconButton(onClick = { viewModel.playPause() }) {
-                Icon(Icons.Default.PlayArrow, "Play/Pause", modifier = Modifier.size(56.dp))
+            // inside PlayerScreen's controls row (replace existing play/pause IconButton)
+            val isPlaying by viewModel.isPlaying
+            val coroutineScope = rememberCoroutineScope()
+
+// base scale change when playing vs paused
+            val baseScale by animateFloatAsState(
+                targetValue = if (isPlaying) 1.0f else 1.0f, // keep same base, scale on tap only
+                animationSpec = spring(stiffness = Spring.StiffnessMedium)
+            )
+
+// one-shot tap-pop scale state
+            var tapScale by remember { mutableStateOf(1f) }
+            val tapScaleAnimated by animateFloatAsState(
+                targetValue = tapScale,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium)
+            )
+            IconButton(
+                onClick = {
+                    // pop animation sequence then toggle playback
+                    coroutineScope.launch {
+                        tapScale = 0.9f
+                        // give the animation system a frame to start
+                        delay(60)
+                        tapScale = 1.12f
+                        delay(90)
+                        tapScale = 1f
+                    }
+                    viewModel.playPause()
+                },
+                modifier = Modifier
+                    .size(72.dp) // adjust central button size as you prefer
+                    .graphicsLayer {
+                        // combine base + tap scale
+                        scaleX = baseScale * tapScaleAnimated
+                        scaleY = baseScale * tapScaleAnimated
+                    }
+            ) {
+                Crossfade(targetState = isPlaying) { playing ->
+                    if (playing) {
+                        Icon(
+                            imageVector = Icons.Default.Pause,
+                            contentDescription = "Pause",
+                            modifier = Modifier.size(36.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Play",
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
             }
             IconButton(onClick = { viewModel.skipNext() }) {
                 Icon(Icons.Default.SkipNext, "Skip Next", modifier = Modifier.size(40.dp))
@@ -675,15 +741,16 @@ fun MiniPlayerBar(
 ) {
     val currentSong by viewModel.currentSong
     val isPlaying by viewModel.isPlaying
-    val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
-    // small animation for art and play icon when song changes or playing state changes
     val artScale by animateFloatAsState(
         targetValue = if (currentSong != null) 1f else 0.9f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium)
     )
+
+    // subtle scaling for the play/pause button (larger when playing)
+    val buttonBaseScaleTarget = if (isPlaying) 1.05f else 1f
     val buttonScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.05f else 1f,
+        targetValue = buttonBaseScaleTarget,
         animationSpec = spring(stiffness = Spring.StiffnessLow)
     )
 
@@ -694,7 +761,7 @@ fun MiniPlayerBar(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // album art with animated size/scale
+        // album art (no rotation)
         AsyncImage(
             model = currentSong?.artworkUri,
             contentDescription = currentSong?.title?.toString() ?: "No song",
@@ -728,20 +795,32 @@ fun MiniPlayerBar(
         // play/pause button with subtle scale animation
         IconButton(
             onClick = { viewModel.playPause() },
-            modifier = Modifier.size(40.dp * buttonScale) // Dp * Float is supported
+            modifier = Modifier.size(40.dp * buttonScale)
         ) {
-            Icon(
-                imageVector = playPauseIcon,
-                contentDescription = "Play/Pause",
-                modifier = Modifier.size(24.dp)
-            )
+            Crossfade(targetState = isPlaying) { playing ->
+                if (playing) {
+                    Icon(
+                        imageVector = Icons.Default.Pause,
+                        contentDescription = "Pause",
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play",
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
         }
-        // optional skip next
+
         IconButton(onClick = { viewModel.skipNext() }) {
             Icon(Icons.Default.SkipNext, contentDescription = "Skip Next")
         }
     }
 }
+
+
 
 
 
