@@ -1,44 +1,39 @@
+// MainActivity.kt
 package com.example.rythm
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.InfiniteRepeatableSpec
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.spring
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ContentUris
+import android.content.ContentResolver
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -47,9 +42,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip // <-- needed for Modifier.clip(...)
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,22 +56,6 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
-import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.isGranted
-import com.google.accompanist.permissions.rememberPermissionState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import java.util.Locale
-import android.content.ContentUris
-import android.content.ContentResolver
-import android.media.MediaScannerConnection
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.DrawerState
-import androidx.compose.material3.ModalDrawerSheet
 import coil.compose.AsyncImage
 import com.example.rythm.ui.theme.RythmTheme
 import androidx.navigation.NavHostController
@@ -84,26 +65,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import com.google.common.util.concurrent.ListenableFuture
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.isGranted
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.CoroutineScope as KCoroutineScope
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.launch
+import java.util.Locale
 import kotlin.math.roundToInt
-
 
 // ---------- Navigation + models ----------
 sealed class Screen(
@@ -137,6 +107,15 @@ data class Song(
     val fileType: String?
 )
 
+// Simple metadata type used when saving metadata from dialog.
+data class SongMetadata(
+    val id: Long,
+    val title: String,
+    val artist: String,
+    val composer: String? = null,
+    val album: String? = null
+)
+
 // ---------- Permission gate (Android 13+ compatible) ----------
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -167,6 +146,7 @@ fun PermissionGatedContent(
 
 // ---------- Activity ----------
 class MainActivity : ComponentActivity() {
+    @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installSplashScreen()
@@ -189,7 +169,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ---------- Drawer ----------
+// ---------- Drawer (unchanged) ----------
 @Composable
 fun AppDrawerContent(
     navController: NavHostController,
@@ -268,23 +248,23 @@ fun AlbumGrid(
 
     LaunchedEffect(Unit) {
         val projection = arrayOf(
-            MediaStore.Audio.Albums._ID,
-            MediaStore.Audio.Albums.ALBUM,
-            MediaStore.Audio.Albums.ARTIST
+            android.provider.MediaStore.Audio.Albums._ID,
+            android.provider.MediaStore.Audio.Albums.ALBUM,
+            android.provider.MediaStore.Audio.Albums.ARTIST
         )
-        val sortOrder = "${MediaStore.Audio.Albums.ALBUM} ASC"
+        val sortOrder = "${android.provider.MediaStore.Audio.Albums.ALBUM} ASC"
         val loaded = mutableListOf<Album>()
         contentResolver.query(
-            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+            android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
             projection, null, null, sortOrder
         )?.use { c ->
-            val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Albums._ID)
-            val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM)
-            val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Albums.ARTIST)
+            val idCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Albums._ID)
+            val titleCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Albums.ALBUM)
+            val artistCol = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Albums.ARTIST)
             while (c.moveToNext()) {
                 val id = c.getLong(idCol)
-                val title = c.getString(titleCol)
-                val artist = c.getString(artistCol)
+                val title = c.getString(titleCol) ?: "Unknown"
+                val artist = c.getString(artistCol) ?: "Unknown"
                 val artworkUri: Uri = ContentUris.withAppendedId(
                     Uri.parse("content://media/external/audio/albumart"), id
                 )
@@ -307,7 +287,6 @@ fun AlbumGrid(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Use the grid 'items' extension explicitly imported above.
             items(albumList) { album ->
                 AlbumGridItem(album = album) { onAlbumClick(album.id) }
             }
@@ -351,7 +330,7 @@ fun AlbumGridItem(
     }
 }
 
-// ---------- SongLoader (RESTORED) ----------
+// ---------- SongLoader ----------
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongLoader(
@@ -413,6 +392,89 @@ fun Long.formatTime(): String {
     return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
 }
 
+// ---------- EditSongDialog ----------
+@Composable
+fun EditSongDialog(
+    currentSongMeta: MediaMetadata?,
+    initialLrc: String?,
+    onSave: (title: String, artist: String, composer: String?, lrcText: String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val defaultTitle = currentSongMeta?.title?.toString() ?: ""
+    val defaultArtist = currentSongMeta?.artist?.toString() ?: ""
+    val defaultComposer = currentSongMeta?.extras?.getString("composer") ?: ""
+
+    var title by remember { mutableStateOf(defaultTitle) }
+    var artist by remember { mutableStateOf(defaultArtist) }
+    var composer by remember { mutableStateOf(defaultComposer) }
+    var lrcText by remember { mutableStateOf(initialLrc ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit song details") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Song title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = artist,
+                    onValueChange = { artist = it },
+                    label = { Text("Artist") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = composer,
+                    onValueChange = { composer = it },
+                    label = { Text("Composer (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Paste synced (LRC) or unsynced lyrics below:", style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = lrcText,
+                    onValueChange = { lrcText = it },
+                    label = { Text("Lyrics (LRC / plain)") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    maxLines = 20,
+                    singleLine = false
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "If you paste LRC (timestamps like [00:12.34]) the app will store them as synced lyrics.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(2.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (title.isBlank()) {
+                    onDismiss()
+                    return@TextButton
+                }
+                onSave(title.trim(), artist.trim(), composer.trim().ifBlank { null }, lrcText.ifBlank { null })
+            }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
 // ---------- PlayerScreen / MiniPlayerBar / App + Nav ----------
 @Composable
 fun PlayerScreen(
@@ -423,7 +485,6 @@ fun PlayerScreen(
     val isPlaying by viewModel.isPlaying
     val currentPosition by viewModel.currentPosition
     val songDuration by viewModel.songDuration
-    val playPauseIcon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow
 
     var isDragging by remember { mutableStateOf(false) }
     var sliderPosition by remember { mutableStateOf(currentPosition.toFloat()) }
@@ -435,6 +496,10 @@ fun PlayerScreen(
     val lyricListState = rememberLazyListState()
 
     var showEditDialog by remember { mutableStateOf(false) }
+    var initialLrc by remember { mutableStateOf<String?>(null) }
+
+    // If your PlayerViewModel exposes LRC text StateFlow, collect it here (uncomment & adapt if exists)
+    // LaunchedEffect(Unit) { viewModel.currentLrcText.collect { initialLrc = it } }
 
     LaunchedEffect(isPlaying, isDragging, currentPosition) {
         if (isPlaying && !isDragging) {
@@ -504,7 +569,6 @@ fun PlayerScreen(
             .padding(bottom = 16.dp)
             .pointerInput(Unit) {
                 detectVerticalDragGestures { _, dragAmount ->
-                    // Detect a downward swipe
                     if (dragAmount > 20) {
                         onCollapse()
                     }
@@ -518,14 +582,14 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = onCollapse) { Icon(Icons.Default.KeyboardArrowDown, "Collapse") }
+            IconButton(onClick = onCollapse) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Collapse") }
             Text(
                 text = currentSong?.albumTitle.toString().uppercase(Locale.getDefault()),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
             )
-            IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.MoreVert, "Options") }
+            IconButton(onClick = { showEditDialog = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Options") }
         }
 
         Column(
@@ -594,7 +658,6 @@ fun PlayerScreen(
                             )
                         }
                     } else {
-                        // Use named 'count' to avoid ambiguous overloads
                         items(count = lyricLines.size) { index ->
                             val line = lyricLines[index]
                             val isCurrentLine = (index == currentLyricIndex)
@@ -647,33 +710,26 @@ fun PlayerScreen(
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             IconButton(onClick = { /* TODO: Shuffle */ }) {
-                Icon(Icons.Default.Shuffle, "Shuffle", modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Shuffle, contentDescription = "Shuffle", modifier = Modifier.size(28.dp))
             }
             IconButton(onClick = { viewModel.skipPrevious() }) {
-                Icon(Icons.Default.SkipPrevious, "Skip Previous", modifier = Modifier.size(40.dp))
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Skip Previous", modifier = Modifier.size(40.dp))
             }
-            // inside PlayerScreen's controls row (replace existing play/pause IconButton)
-            val isPlaying by viewModel.isPlaying
+
+            // Play / Pause with pop animation
+            val isPlayingLocal by viewModel.isPlaying
             val coroutineScope = rememberCoroutineScope()
 
-// base scale change when playing vs paused
-            val baseScale by animateFloatAsState(
-                targetValue = if (isPlaying) 1.0f else 1.0f, // keep same base, scale on tap only
-                animationSpec = spring(stiffness = Spring.StiffnessMedium)
-            )
-
-// one-shot tap-pop scale state
             var tapScale by remember { mutableStateOf(1f) }
             val tapScaleAnimated by animateFloatAsState(
                 targetValue = tapScale,
                 animationSpec = spring(stiffness = Spring.StiffnessMedium)
             )
+
             IconButton(
                 onClick = {
-                    // pop animation sequence then toggle playback
                     coroutineScope.launch {
                         tapScale = 0.9f
-                        // give the animation system a frame to start
                         delay(60)
                         tapScale = 1.12f
                         delay(90)
@@ -682,14 +738,13 @@ fun PlayerScreen(
                     viewModel.playPause()
                 },
                 modifier = Modifier
-                    .size(72.dp) // adjust central button size as you prefer
+                    .size(72.dp)
                     .graphicsLayer {
-                        // combine base + tap scale
-                        scaleX = baseScale * tapScaleAnimated
-                        scaleY = baseScale * tapScaleAnimated
+                        scaleX = tapScaleAnimated
+                        scaleY = tapScaleAnimated
                     }
             ) {
-                Crossfade(targetState = isPlaying) { playing ->
+                Crossfade(targetState = isPlayingLocal) { playing ->
                     if (playing) {
                         Icon(
                             imageVector = Icons.Default.Pause,
@@ -705,11 +760,12 @@ fun PlayerScreen(
                     }
                 }
             }
+
             IconButton(onClick = { viewModel.skipNext() }) {
-                Icon(Icons.Default.SkipNext, "Skip Next", modifier = Modifier.size(40.dp))
+                Icon(Icons.Default.SkipNext, contentDescription = "Skip Next", modifier = Modifier.size(40.dp))
             }
             IconButton(onClick = { /* TODO: Repeat */ }) {
-                Icon(Icons.Default.Repeat, "Repeat", modifier = Modifier.size(28.dp))
+                Icon(Icons.Default.Repeat, contentDescription = "Repeat", modifier = Modifier.size(28.dp))
             }
         }
 
@@ -720,8 +776,8 @@ fun PlayerScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = { /* TODO: Devices */ }) { Icon(Icons.Outlined.Devices, "Devices") }
-            IconButton(onClick = { /* TODO: Share */ }) { Icon(Icons.Default.Share, "Share") }
+            IconButton(onClick = { /* TODO: Devices */ }) { Icon(Icons.Outlined.Devices, contentDescription = "Devices") }
+            IconButton(onClick = { /* TODO: Share */ }) { Icon(Icons.Default.Share, contentDescription = "Share") }
             IconButton(onClick = { showLyrics = !showLyrics }) {
                 Icon(
                     imageVector = Icons.Default.TextSnippet,
@@ -731,6 +787,48 @@ fun PlayerScreen(
                 )
             }
         }
+    }
+
+    // show edit dialog when triggered
+    if (showEditDialog) {
+        EditSongDialog(
+            currentSongMeta = currentSong,
+            initialLrc = initialLrc,
+            onSave = { newTitle, newArtist, newComposer, lrc ->
+                // get a reliable id if available from controller's currentMediaItem
+                val idFromController = viewModel.mediaController
+                    ?.currentMediaItem
+                    ?.mediaId
+                    ?.toLongOrNull()
+
+                val id = idFromController ?: System.currentTimeMillis()
+
+                val metadata = SongMetadata(
+                    id = id,
+                    title = newTitle,
+                    artist = newArtist,
+                    composer = newComposer,
+                    album = currentSong?.albumTitle?.toString()
+                )
+
+                // Save metadata & lyrics using your ViewModel method (signature must match)
+                try {
+                    viewModel.saveSongMetadataAndLyrics(id, metadata, lrc)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                // If you want the UI to update instantly, add a helper in PlayerViewModel
+                // like: fun updateCurrentMetadata(meta: MediaMetadata) { _currentSong.value = meta }
+                // and call it here (uncomment if implemented).
+                //
+                // Example:
+                // viewModel.updateCurrentMetadata(MediaMetadata.Builder().setTitle(newTitle).setArtist(newArtist).build())
+
+                showEditDialog = false
+            },
+            onDismiss = { showEditDialog = false }
+        )
     }
 }
 
@@ -747,7 +845,6 @@ fun MiniPlayerBar(
         animationSpec = spring(stiffness = Spring.StiffnessMedium)
     )
 
-    // subtle scaling for the play/pause button (larger when playing)
     val buttonBaseScaleTarget = if (isPlaying) 1.05f else 1f
     val buttonScale by animateFloatAsState(
         targetValue = buttonBaseScaleTarget,
@@ -761,7 +858,6 @@ fun MiniPlayerBar(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // album art (no rotation)
         AsyncImage(
             model = currentSong?.artworkUri,
             contentDescription = currentSong?.title?.toString() ?: "No song",
@@ -792,10 +888,9 @@ fun MiniPlayerBar(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // play/pause button with subtle scale animation
         IconButton(
             onClick = { viewModel.playPause() },
-            modifier = Modifier.size(40.dp * buttonScale)
+            modifier = Modifier.size((40.dp * buttonScale).coerceAtLeast(32.dp))
         ) {
             Crossfade(targetState = isPlaying) { playing ->
                 if (playing) {
@@ -820,10 +915,6 @@ fun MiniPlayerBar(
     }
 }
 
-
-
-
-
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainApp(
@@ -841,13 +932,11 @@ fun MainApp(
     Scaffold(
         bottomBar = {
             Column {
-                // Animated mini player: slide up from bottom when visible, slide down when hidden
                 val showMini = currentSong != null && currentRoute != Screen.Player.route
 
                 AnimatedVisibility(
                     visible = showMini,
                     enter = slideInVertically(
-                        // start the mini player just below the screen
                         initialOffsetY = { fullHeight -> fullHeight / 2 },
                         animationSpec = tween(durationMillis = 300)
                     ) + fadeIn(animationSpec = tween(200)),
@@ -856,13 +945,9 @@ fun MainApp(
                         animationSpec = tween(durationMillis = 250)
                     ) + fadeOut(animationSpec = tween(180))
                 ) {
-                    // Animated mini bar composable
                     MiniPlayerBar(
                         viewModel = playerViewModel,
-                        onClick = {
-                            // navigate to full player with default nav animation — this can be animated too
-                            navController.navigate(Screen.Player.route)
-                        }
+                        onClick = { navController.navigate(Screen.Player.route) }
                     )
                 }
 
@@ -892,7 +977,6 @@ fun MainApp(
             modifier = Modifier.padding(innerPadding)
         )
     }
-
 }
 
 @Composable
@@ -910,7 +994,6 @@ fun AppNavigation(
         composable(Screen.Home.route) { HomeScreen(onProfileClick) }
         composable(Screen.Search.route) { SearchScreen() }
         composable(Screen.Library.route) {
-            // SongLoader is now defined, so type inference works
             SongLoader(
                 modifier = Modifier,
                 viewModel = viewModel,
@@ -969,238 +1052,5 @@ fun HomeScreen(onProfileClick: () -> Unit) {
 fun SearchScreen() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Search Screen - Coming Soon!", style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-// ---------- Album Detail (fixed items call) ----------
-@Composable
-fun AlbumDetailScreen(
-    albumId: Long,
-    viewModel: PlayerViewModel,
-    onBack: () -> Unit
-) {
-    val context = LocalContext.current
-    val contentResolver = context.contentResolver
-
-    var album by remember { mutableStateOf<Album?>(null) }
-    var songsInAlbum by remember { mutableStateOf<List<Song>>(emptyList()) }
-    var mediaItemsList by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    fun formatMimeType(mimeType: String?): String = when (mimeType) {
-        "audio/flac" -> "FLAC"
-        "audio/mpeg" -> "MP3"
-        "audio/vorbis" -> "OGG"
-        else -> "AUDIO"
-    }
-
-    LaunchedEffect(albumId) {
-        isLoading = true
-        contentResolver.query(
-            MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Audio.Albums.ALBUM, MediaStore.Audio.Albums.ARTIST),
-            "${MediaStore.Audio.Albums._ID} = ?",
-            arrayOf(albumId.toString()),
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val title = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ALBUM))
-                val artist = cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.Audio.Albums.ARTIST))
-                val artworkUri: Uri = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"),
-                    albumId
-                )
-                album = Album(albumId, title, artist, artworkUri)
-            }
-        }
-
-        val songProjection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.MIME_TYPE
-        )
-        val selection = "${MediaStore.Audio.Media.ALBUM_ID} = ?"
-        val selectionArgs = arrayOf(albumId.toString())
-        val sortOrder = "${MediaStore.Audio.Media.TRACK} ASC, ${MediaStore.Audio.Media.TITLE} ASC"
-
-        val loadedSongs = mutableListOf<Song>()
-        contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            songProjection, selection, selectionArgs, sortOrder
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val mimeTypeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                val title = cursor.getString(titleCol)
-                val artist = cursor.getString(artistCol)
-                val duration = cursor.getLong(durationCol)
-                val fileType = formatMimeType(cursor.getString(mimeTypeCol))
-                val albumArtUri: Uri? = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"),
-                    cursor.getLong(albumIdCol)
-                )
-                val contentUri: Uri = ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
-                )
-                loadedSongs.add(Song(id, title, artist, duration, contentUri, albumArtUri, fileType))
-            }
-        }
-        songsInAlbum = loadedSongs
-
-        mediaItemsList = loadedSongs.map { song ->
-            val extras = Bundle().apply { putString("fileType", song.fileType) }
-            MediaItem.Builder()
-                .setUri(song.contentUri)
-                .setMediaId(song.id.toString())
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(song.title)
-                        .setArtist(song.artist)
-                        .setArtworkUri(song.albumArtUri)
-                        .setExtras(extras)
-                        .build()
-                )
-                .build()
-        }
-
-        isLoading = false
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 16.dp)
-    ) {
-        item {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Back")
-            }
-        }
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                AsyncImage(
-                    model = album?.artworkUri,
-                    contentDescription = album?.title,
-                    modifier = Modifier
-                        .fillMaxWidth(0.7f)
-                        .aspectRatio(1f)
-                        .padding(vertical = 16.dp),
-                    placeholder = rememberVectorPainter(Icons.Default.MusicNote),
-                    error = rememberVectorPainter(Icons.Default.MusicNote)
-                )
-                Text(
-                    text = album?.title ?: "Unknown Album",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.AccountCircle, contentDescription = "Artist", modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = album?.artist ?: "Unknown Artist",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = "Album • ${album?.artist ?: "Unknown Artist"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                )
-            }
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row {
-                    IconButton(onClick = { /*TODO*/ }) { Icon(Icons.Default.Add, "Add", modifier = Modifier.size(28.dp)) }
-                    IconButton(onClick = { /*TODO*/ }) { Icon(Icons.Default.ArrowDownward, "Download", modifier = Modifier.size(28.dp)) }
-                    IconButton(onClick = { /*TODO*/ }) { Icon(Icons.Default.MoreVert, "More", modifier = Modifier.size(28.dp)) }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { /*TODO*/ }) { Icon(Icons.Default.Shuffle, "Shuffle", modifier = Modifier.size(28.dp)) }
-                    IconButton(
-                        onClick = {
-                            if (mediaItemsList.isNotEmpty()) viewModel.onSongClick(mediaItemsList, 0)
-                        },
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(
-                            Icons.Default.PlayArrow, "Play",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // <-- FIXED: use positional 'items' to iterate songsInAlbum -->
-        items(songsInAlbum) { song ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val index = mediaItemsList.indexOfFirst { it.mediaId == song.id.toString() }
-                        if (index != -1) {
-                            viewModel.onSongClick(mediaItemsList, index)
-                        }
-                    }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = song.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = song.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
-                }
-                IconButton(onClick = { /* TODO: More */ }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More options")
-                }
-            }
-        }
-
     }
 }
